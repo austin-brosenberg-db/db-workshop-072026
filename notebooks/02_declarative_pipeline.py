@@ -134,8 +134,8 @@ def bronze_food_service():
 )
 @dlt.expect_or_drop("valid_cardholder_id", "cardholder_id IS NOT NULL")
 @dlt.expect_or_drop("valid_status", "status IN ('active', 'inactive', 'suspended', 'graduated')")
-@dlt.expect_or_warn("has_email", "email IS NOT NULL")
-@dlt.expect_or_warn("has_institution", "institution_id IS NOT NULL")
+@dlt.expect("has_email", "email IS NOT NULL")
+@dlt.expect("has_institution", "institution_id IS NOT NULL")
 def silver_cardholders():
     """Clean cardholder records with data quality validation."""
     return (
@@ -156,7 +156,7 @@ def silver_cardholders():
 )
 @dlt.expect_or_drop("valid_transaction_id", "transaction_id IS NOT NULL")
 @dlt.expect_or_drop("valid_amount", "amount > 0 AND amount < 10000")
-@dlt.expect_or_warn("valid_cardholder", "cardholder_id IS NOT NULL")
+@dlt.expect("valid_cardholder", "cardholder_id IS NOT NULL")
 @dlt.expect_all_or_fail({
     "valid_merchant": "merchant_id IS NOT NULL",
     "valid_timestamp": "timestamp IS NOT NULL"
@@ -196,8 +196,8 @@ def silver_transactions():
     table_properties={"quality": "silver"}
 )
 @dlt.expect_or_drop("valid_event_id", "event_id IS NOT NULL")
-@dlt.expect_or_warn("valid_door", "door_id IS NOT NULL")
-@dlt.expect_or_warn("valid_building", "building_id IS NOT NULL")
+@dlt.expect("valid_door", "door_id IS NOT NULL")
+@dlt.expect("valid_building", "building_id IS NOT NULL")
 def silver_access_events():
     """Enrich access events with cardholder data and time analysis."""
     cardholders = dlt.read(f"{USER_ID}_silver_cardholders").select(
