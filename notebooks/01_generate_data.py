@@ -21,12 +21,15 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 import dbldatagen as dg
-from pyspark.sql.functions import *
+from pyspark.sql import functions as F
 from pyspark.sql.types import *
 from faker import Faker
 import random
 from datetime import datetime, timedelta
 import json
+
+# Keep Python's built-in round
+_round = round
 
 # Initialize Faker for realistic names
 fake = Faker()
@@ -200,7 +203,7 @@ def generate_cardholders(num_records: int, institutions: list) -> list:
             "class_year": class_year,
             "housing_area": housing_area,
             "meal_plan_type": meal_plan,
-            "stored_value_balance": round(random.uniform(0, 500), 2),
+            "stored_value_balance": _round(random.uniform(0, 500), 2),
             "created_at": (datetime.now() - timedelta(days=random.randint(30, 365))).isoformat() + "Z",
             "updated_at": (datetime.now() - timedelta(days=random.randint(0, 30))).isoformat() + "Z"
         }
@@ -248,15 +251,15 @@ def generate_transactions(num_records: int, cardholders: list, merchants: list, 
 
         # Transaction amount based on merchant category
         if merchant["category"] == "dining":
-            amount = round(random.uniform(5.00, 18.00), 2)
+            amount = _round(random.uniform(5.00, 18.00), 2)
         elif merchant["category"] == "retail":
-            amount = round(random.uniform(2.00, 75.00), 2)
+            amount = _round(random.uniform(2.00, 75.00), 2)
         elif merchant["category"] == "vending":
-            amount = round(random.uniform(1.00, 5.00), 2)
+            amount = _round(random.uniform(1.00, 5.00), 2)
         elif merchant["category"] == "off_campus":
-            amount = round(random.uniform(8.00, 35.00), 2)
+            amount = _round(random.uniform(8.00, 35.00), 2)
         else:
-            amount = round(random.uniform(1.00, 25.00), 2)
+            amount = _round(random.uniform(1.00, 25.00), 2)
 
         # Payment method varies by patron type
         if cardholder["meal_plan_type"] and merchant["category"] == "dining":
