@@ -322,7 +322,7 @@ def generate_access_events(num_records: int, cardholders: list, buildings: list,
         elif building["type"] in ["library", "recreation"]:
             hour = random.choices(range(24), weights=[0.1]*6 + [0.5, 1, 2, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 1, 0.5, 0.3, 0.2])[0]
         else:
-            hour = random.choices(range(24), weights=[0.1]*7 + [2, 3, 4, 4, 3, 3, 4, 4, 3, 2, 1, 0.3, 0.2, 0.1, 0.1, 0.1])[0]
+            hour = random.choices(range(24), weights=[0.1]*7 + [2, 3, 4, 4, 3, 3, 4, 4, 3, 2, 1, 0.5, 0.3, 0.2, 0.1, 0.1, 0.1])[0]
 
         timestamp = base_date.replace(hour=hour, minute=random.randint(0, 59), second=random.randint(0, 59))
 
