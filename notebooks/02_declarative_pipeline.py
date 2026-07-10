@@ -50,7 +50,7 @@ def bronze_cardholders():
         .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
         .load(f"{VOLUME_BASE}/cardholders/")
         .withColumn("_ingested_at", current_timestamp())
-        .withColumn("_source_file", input_file_name())
+        .withColumn("_source_file", col("_metadata.file_path"))
     )
 
 # COMMAND ----------
@@ -71,7 +71,7 @@ def bronze_transactions():
         .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
         .load(f"{VOLUME_BASE}/transactions/")
         .withColumn("_ingested_at", current_timestamp())
-        .withColumn("_source_file", input_file_name())
+        .withColumn("_source_file", col("_metadata.file_path"))
     )
 
 # COMMAND ----------
@@ -92,7 +92,7 @@ def bronze_access_events():
         .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
         .load(f"{VOLUME_BASE}/access_events/")
         .withColumn("_ingested_at", current_timestamp())
-        .withColumn("_source_file", input_file_name())
+        .withColumn("_source_file", col("_metadata.file_path"))
     )
 
 # COMMAND ----------
@@ -113,7 +113,7 @@ def bronze_food_service():
         .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
         .load(f"{VOLUME_BASE}/food_service/")
         .withColumn("_ingested_at", current_timestamp())
-        .withColumn("_source_file", input_file_name())
+        .withColumn("_source_file", col("_metadata.file_path"))
     )
 
 # COMMAND ----------
