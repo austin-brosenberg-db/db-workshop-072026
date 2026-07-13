@@ -15,17 +15,17 @@
 # MAGIC
 # MAGIC ## Workshop Steps
 # MAGIC
-# MAGIC | Step | Title | Duration |
-# MAGIC |------|-------|----------|
-# MAGIC | 1 | Copy Git Repo to Personal Folder | 5 min |
-# MAGIC | 2 | Create Catalog/Schema/Volume | 5 min |
-# MAGIC | 3 | Run Data Generation via Lakeflow Job | 15 min |
-# MAGIC | 4 | Explore Generated Data | 10 min |
-# MAGIC | 5 | Create Declarative Pipeline | 20 min |
-# MAGIC | 6 | Explore Gold Tables | 15 min |
-# MAGIC | 7 | Create Dashboard | 15 min |
-# MAGIC | 8 | Setup Genie Agent | 15 min |
-# MAGIC | 9 | Deploy App | 20 min |
+# MAGIC | Step | Title |
+# MAGIC |------|-------|
+# MAGIC | 1 | Copy Git Repo to Personal Folder |
+# MAGIC | 2 | Create Catalog/Schema/Volume |
+# MAGIC | 3 | Run Data Generation via Lakeflow Job |
+# MAGIC | 4 | Explore Generated Data |
+# MAGIC | 5 | Create Declarative Pipeline |
+# MAGIC | 6 | Explore Gold Tables |
+# MAGIC | 7 | Create Dashboard | 
+# MAGIC | 8 | Setup Genie Agent |
+# MAGIC | 9 | Deploy App |
 
 # COMMAND ----------
 
