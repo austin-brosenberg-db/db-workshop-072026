@@ -237,14 +237,20 @@ display(
 # COMMAND ----------
 
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.pipelines import PipelineLibrary, NotebookLibrary, PipelineCluster
+from databricks.sdk.service.pipelines import (
+    PipelineLibrary,
+    NotebookLibrary,
+    PipelineCluster,
+    PipelineClusterAutoscale,
+    PipelineClusterAutoscaleMode
+)
 
 w = WorkspaceClient()
 
 # Path to the declarative pipeline notebook
 pipeline_notebook = f"{WORKSHOP_PATH}/notebooks/02_declarative_pipeline"
 
-# Create the pipeline with on-demand cluster
+# Create the pipeline with autoscaling multi-node cluster
 pipeline = w.pipelines.create(
     name=f"{USER_ID}_illumia_pipeline",
     catalog=USER_CATALOG,
@@ -261,13 +267,11 @@ pipeline = w.pipelines.create(
     clusters=[
         PipelineCluster(
             label="default",
-            num_workers=1,
-            node_type_id="i3.xlarge",
-            spark_conf={
-                "spark.databricks.cluster.profile": "singleNode",
-                "spark.master": "local[*]"
-            },
-            custom_tags={"ResourceClass": "SingleNode"}
+            autoscale=PipelineClusterAutoscale(
+                min_workers=1,
+                max_workers=4,
+                mode=PipelineClusterAutoscaleMode.ENHANCED
+            )
         )
     ],
     continuous=False
