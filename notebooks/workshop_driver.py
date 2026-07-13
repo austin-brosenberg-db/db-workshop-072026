@@ -58,8 +58,6 @@ print(f"Your resources will be created in: {SHARED_CATALOG}.{USER_ID}")
 # MAGIC ## Step 1: Copy Workshop Repository
 # MAGIC
 # MAGIC Each participant gets their own copy of the workshop assets.
-# MAGIC
-# MAGIC **AWS Equivalent**: Cloning from CodeCommit or copying S3 buckets across accounts
 
 # COMMAND ----------
 
@@ -83,8 +81,6 @@ for item in dbutils.fs.ls(dest_path):
 # MAGIC ## Step 2: Create Your Personal Namespace
 # MAGIC
 # MAGIC Each participant gets an isolated schema within the shared catalog.
-# MAGIC
-# MAGIC **AWS Equivalent**: Creating S3 prefixes + IAM policies + Glue database per developer
 
 # COMMAND ----------
 
@@ -112,8 +108,6 @@ print(f"Created volume: {CHECKPOINT_PATH}")
 # MAGIC ## Step 3: Run Data Generation via Lakeflow Job
 # MAGIC
 # MAGIC Create a Lakeflow Job to run the data generation notebook. This approach is production-ready.
-# MAGIC
-# MAGIC **AWS Equivalent**: Step Functions workflow + Glue ETL job
 
 # COMMAND ----------
 
@@ -243,8 +237,6 @@ display(
 # MAGIC - **Bronze**: Raw ingestion with Autoloader
 # MAGIC - **Silver**: Cleaned, validated, enriched with expectations
 # MAGIC - **Gold**: Business aggregations for analytics
-# MAGIC
-# MAGIC **AWS Equivalent**: 12+ Glue ETL jobs + Step Functions + Glue Data Quality
 
 # COMMAND ----------
 
@@ -417,8 +409,6 @@ display(
 # MAGIC 3. **Engagement Distribution** - gold_cardholder_360
 # MAGIC 4. **Spending by Housing** - gold_behavior_patterns
 # MAGIC
-# MAGIC **AWS Equivalent**: QuickSight dashboard with Athena datasets
-# MAGIC
 # MAGIC ### Instructions
 # MAGIC 1. Go to **Dashboards** in left sidebar
 # MAGIC 2. Click **Create Dashboard**
@@ -514,8 +504,6 @@ display(spark.sql(query4))
 # MAGIC
 # MAGIC Create a Genie Space with access to your gold tables. The Genie Agent will power the AI assistant in our app.
 # MAGIC
-# MAGIC **AWS Equivalent**: Bedrock Agents + custom knowledge base + Lambda tools
-# MAGIC
 # MAGIC ### Instructions
 # MAGIC 1. Go to **Genie** in left sidebar (or search "Genie")
 # MAGIC 2. Click **Create Genie Space**
@@ -554,8 +542,6 @@ print("  - Show me cardholders with high engagement scores")
 # MAGIC ## Step 9: Deploy the Databricks App
 # MAGIC
 # MAGIC Deploy the app with embedded dashboard and Genie Agent chat interface.
-# MAGIC
-# MAGIC **AWS Equivalent**: API Gateway + Lambda + S3 + Cognito + Bedrock integration
 # MAGIC
 # MAGIC ### Prerequisites
 # MAGIC - Dashboard ID from Step 7
@@ -651,16 +637,14 @@ print(f"Open your app at: https://{w.config.host.replace('https://', '')}/apps/{
 # MAGIC
 # MAGIC ### What We Built
 # MAGIC
-# MAGIC | Component | Databricks | AWS Equivalent |
-# MAGIC |-----------|------------|----------------|
-# MAGIC | Data Ingestion | Autoloader | S3 Events + Lambda + Glue Crawlers |
-# MAGIC | Transformation | Declarative Pipeline | 12+ Glue ETL + Step Functions |
-# MAGIC | Data Quality | DP Expectations | Glue Data Quality |
-# MAGIC | Analytics | Lakeview Dashboard | QuickSight |
-# MAGIC | AI Assistant | Genie Agent | Bedrock Agents + Lambda |
-# MAGIC | App | Databricks App | API Gateway + Lambda + S3 + Cognito |
-# MAGIC
-# MAGIC **Total AWS services replaced: ~20**
+# MAGIC | Component | Databricks Feature |
+# MAGIC |-----------|-------------------|
+# MAGIC | Data Ingestion | Autoloader |
+# MAGIC | Transformation | Declarative Pipeline |
+# MAGIC | Data Quality | DP Expectations |
+# MAGIC | Analytics | Lakeview Dashboard |
+# MAGIC | AI Assistant | Genie Agent |
+# MAGIC | App | Databricks App |
 # MAGIC
 # MAGIC ### Your Resources
 # MAGIC
