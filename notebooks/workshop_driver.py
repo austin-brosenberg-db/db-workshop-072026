@@ -109,7 +109,7 @@ from databricks.sdk.service.jobs import Task, NotebookTask, Source
 w = WorkspaceClient()
 
 # Path to data generation notebook
-notebook_path = f"{WORKSHOP_PATH}/notebooks/01_generate_data.py"
+notebook_path = f"{WORKSHOP_PATH}/notebooks/01_generate_data"
 
 # Create job with parameters for catalog and schema
 job = w.jobs.create(
@@ -125,7 +125,7 @@ job = w.jobs.create(
                     "schema": USER_SCHEMA
                 }
             ),
-            existing_cluster_id=spark.conf.get("spark.databricks.clusterUsageTags.clusterId")
+            existing_cluster_id= # fill in with shared cluster ID
         )
     ]
 )
@@ -242,7 +242,7 @@ from databricks.sdk.service.pipelines import PipelineLibrary, NotebookLibrary
 w = WorkspaceClient()
 
 # Path to the declarative pipeline notebook
-pipeline_notebook = f"{WORKSHOP_PATH}/notebooks/02_declarative_pipeline.py"
+pipeline_notebook = f"{WORKSHOP_PATH}/notebooks/02_declarative_pipeline"
 
 # Create the pipeline
 pipeline = w.pipelines.create(
