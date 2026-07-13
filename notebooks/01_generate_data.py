@@ -45,9 +45,15 @@ random.seed(42)
 
 # COMMAND ----------
 
-# Configuration - uses the workspace's default catalog
-CATALOG = "illumia_demo_catalog"
-SCHEMA = "workshop_data"
+# Widget parameters - set by job or manually
+dbutils.widgets.text("catalog", "illumia_demo_catalog")
+dbutils.widgets.text("schema", "workshop_data")
+
+# COMMAND ----------
+
+# Configuration from widgets
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 VOLUME_BASE = f"/Volumes/{CATALOG}/{SCHEMA}"
 
 # Data generation parameters

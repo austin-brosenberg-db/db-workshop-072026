@@ -16,12 +16,13 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
 # Get configuration from pipeline settings
+# CATALOG/SCHEMA define where source data volumes are located
+# The pipeline's catalog/target settings determine where tables are created
 CATALOG = spark.conf.get("pipeline.catalog", "illumia_demo_catalog")
 SCHEMA = spark.conf.get("pipeline.schema", "workshop_data")
-USER_ID = spark.conf.get("pipeline.user_id", "default")
 
 VOLUME_BASE = f"/Volumes/{CATALOG}/{SCHEMA}"
-CHECKPOINT_BASE = f"{VOLUME_BASE}/checkpoints/{USER_ID}"
+CHECKPOINT_BASE = f"{VOLUME_BASE}/checkpoints"
 
 # COMMAND ----------
 
@@ -35,7 +36,7 @@ CHECKPOINT_BASE = f"{VOLUME_BASE}/checkpoints/{USER_ID}"
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_bronze_cardholders",
+    name="bronze_cardholders",
     comment="Raw cardholder data from CS Gold identity management system",
     table_properties={"quality": "bronze"}
 )
@@ -56,7 +57,7 @@ def bronze_cardholders():
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_bronze_transactions",
+    name="bronze_transactions",
     comment="Raw transaction data from GET POS platform",
     table_properties={"quality": "bronze"}
 )
@@ -77,7 +78,7 @@ def bronze_transactions():
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_bronze_access_events",
+    name="bronze_access_events",
     comment="Raw access events from CS Access door control system",
     table_properties={"quality": "bronze"}
 )
@@ -98,7 +99,7 @@ def bronze_access_events():
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_bronze_food_service",
+    name="bronze_food_service",
     comment="Raw food service data from NetMenu operations",
     table_properties={"quality": "bronze"}
 )
@@ -128,7 +129,7 @@ def bronze_food_service():
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_silver_cardholders",
+    name="silver_cardholders",
     comment="Cleaned and deduplicated cardholder dimension",
     table_properties={"quality": "silver"}
 )
@@ -139,7 +140,7 @@ def bronze_food_service():
 def silver_cardholders():
     """Clean cardholder records with data quality validation."""
     return (
-        dlt.read_stream(f"{USER_ID}_bronze_cardholders")
+        dlt.read_stream("bronze_cardholders")
         .withColumn("patron_type_clean",
             when(col("patron_type").isin("student", "staff", "faculty", "visitor"), col("patron_type"))
             .otherwise("other"))
@@ -150,7 +151,7 @@ def silver_cardholders():
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_silver_transactions",
+    name="silver_transactions",
     comment="Enriched transactions joined with cardholder demographics",
     table_properties={"quality": "silver"}
 )
@@ -164,7 +165,7 @@ def silver_cardholders():
 def silver_transactions():
     """Enrich transactions with cardholder data and time features."""
     # Get cardholder dimension for enrichment
-    cardholders = dlt.read(f"{USER_ID}_silver_cardholders").select(
+    cardholders = dlt.read("silver_cardholders").select(
         "cardholder_id",
         "patron_type_clean",
         "housing_area",
@@ -173,7 +174,7 @@ def silver_transactions():
     ).alias("ch")
 
     return (
-        dlt.read_stream(f"{USER_ID}_bronze_transactions")
+        dlt.read_stream("bronze_transactions")
         .alias("txn")
         .withColumn("transaction_date", to_date(col("timestamp")))
         .withColumn("transaction_hour", hour(col("timestamp")))
@@ -191,7 +192,7 @@ def silver_transactions():
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_silver_access_events",
+    name="silver_access_events",
     comment="Enriched access events with cardholder and building context",
     table_properties={"quality": "silver"}
 )
@@ -200,14 +201,14 @@ def silver_transactions():
 @dlt.expect("valid_building", "building_id IS NOT NULL")
 def silver_access_events():
     """Enrich access events with cardholder data and time analysis."""
-    cardholders = dlt.read(f"{USER_ID}_silver_cardholders").select(
+    cardholders = dlt.read("silver_cardholders").select(
         "cardholder_id",
         "patron_type_clean",
         "housing_area"
     ).alias("ch")
 
     return (
-        dlt.read_stream(f"{USER_ID}_bronze_access_events")
+        dlt.read_stream("bronze_access_events")
         .alias("acc")
         .withColumn("event_date", to_date(col("timestamp")))
         .withColumn("event_hour", hour(col("timestamp")))
@@ -232,7 +233,7 @@ def silver_access_events():
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_gold_cardholder_360",
+    name="gold_cardholder_360",
     comment="360-degree view of each cardholder combining transactions and access",
     table_properties={"quality": "gold"}
 )
@@ -241,7 +242,7 @@ def gold_cardholder_360():
 
     # Transaction summary per cardholder
     txn_summary = (
-        dlt.read(f"{USER_ID}_silver_transactions")
+        dlt.read("silver_transactions")
         .groupBy("cardholder_id")
         .agg(
             count("transaction_id").alias("total_transactions"),
@@ -255,7 +256,7 @@ def gold_cardholder_360():
 
     # Access summary per cardholder
     access_summary = (
-        dlt.read(f"{USER_ID}_silver_access_events")
+        dlt.read("silver_access_events")
         .groupBy("cardholder_id")
         .agg(
             count("event_id").alias("total_access_events"),
@@ -267,7 +268,7 @@ def gold_cardholder_360():
     )
 
     # Join with cardholder dimension
-    cardholders = dlt.read(f"{USER_ID}_silver_cardholders")
+    cardholders = dlt.read("silver_cardholders")
 
     return (
         cardholders
@@ -288,14 +289,14 @@ def gold_cardholder_360():
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_gold_location_analytics",
+    name="gold_location_analytics",
     comment="Revenue and traffic analytics by location and time",
     table_properties={"quality": "gold"}
 )
 def gold_location_analytics():
     """Location performance metrics for commerce analytics."""
     return (
-        dlt.read(f"{USER_ID}_silver_transactions")
+        dlt.read("silver_transactions")
         .groupBy(
             "merchant_name",
             "merchant_category",
@@ -317,14 +318,14 @@ def gold_location_analytics():
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_gold_dining_operations",
+    name="gold_dining_operations",
     comment="Food service operational metrics - production and waste analysis",
     table_properties={"quality": "gold"}
 )
 def gold_dining_operations():
     """Dining hall operational efficiency and waste tracking."""
     return (
-        spark.table(f"{CATALOG}.{SCHEMA}.{USER_ID}_bronze_food_service")
+        dlt.read("bronze_food_service")
         .groupBy("location_name", "service_date", "meal_period")
         .agg(
             sum("planned_portions").alias("total_planned"),
@@ -342,7 +343,7 @@ def gold_dining_operations():
 # COMMAND ----------
 
 @dlt.table(
-    name=f"{USER_ID}_gold_behavior_patterns",
+    name="gold_behavior_patterns",
     comment="Cross-domain behavioral insights - the analytics product differentiator",
     table_properties={"quality": "gold"}
 )
@@ -352,7 +353,7 @@ def gold_behavior_patterns():
     Example insight: 'Students in North Campus housing spend 25% more on dining than South Campus.'
     """
     return (
-        dlt.read(f"{USER_ID}_silver_transactions")
+        dlt.read("silver_transactions")
         .filter(col("merchant_category") == "dining")
         .filter(col("housing_area").isNotNull())
         .groupBy("housing_area", "patron_type_clean")

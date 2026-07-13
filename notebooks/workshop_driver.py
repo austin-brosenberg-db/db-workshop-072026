@@ -93,7 +93,7 @@ spark.sql(f"USE SCHEMA {USER_SCHEMA}")
 
 CHECKPOINT_PATH = f"/Volumes/{USER_CATALOG}/{USER_SCHEMA}/checkpoints"
 
-print(f"Created schema: {SHARED_CATALOG}.{USER_ID}")
+print(f"Created schema: {USER_CATALOG}.{USER_SCHEMA}")
 print(f"Created volume: {CHECKPOINT_PATH}")
 
 # COMMAND ----------
@@ -114,7 +114,7 @@ w = WorkspaceClient()
 # Path to data generation notebook
 notebook_path = f"{WORKSHOP_PATH}/notebooks/01_generate_data.py"
 
-# Create job
+# Create job with parameters for catalog and schema
 job = w.jobs.create(
     name=f"{USER_ID}_illumia_data_generation",
     tasks=[
@@ -122,7 +122,11 @@ job = w.jobs.create(
             task_key="generate_data",
             notebook_task=NotebookTask(
                 notebook_path=notebook_path,
-                source=Source.WORKSPACE
+                source=Source.WORKSPACE,
+                base_parameters={
+                    "catalog": USER_CATALOG,
+                    "schema": USER_SCHEMA
+                }
             ),
             existing_cluster_id=spark.conf.get("spark.databricks.clusterUsageTags.clusterId")
         )
@@ -176,7 +180,7 @@ print("Data generation complete!")
 
 # COMMAND ----------
 
-VOLUME_BASE = f"/Volumes/{SHARED_CATALOG}/{SHARED_SCHEMA}"
+VOLUME_BASE = f"/Volumes/{USER_CATALOG}/{USER_SCHEMA}"
 
 # Preview each data source
 sources = {
@@ -241,22 +245,21 @@ from databricks.sdk.service.pipelines import PipelineLibrary, NotebookLibrary
 w = WorkspaceClient()
 
 # Path to the declarative pipeline notebook
-pipeline_notebook = f"/Workspace/Users/{USER_EMAIL}/illumia-workshop/notebooks/02_declarative_pipeline.py"
+pipeline_notebook = f"{WORKSHOP_PATH}/notebooks/02_declarative_pipeline.py"
 
 # Create the pipeline
 pipeline = w.pipelines.create(
     name=f"{USER_ID}_illumia_pipeline",
-    catalog=SHARED_CATALOG,
-    target=USER_ID,
+    catalog=USER_CATALOG,
+    target=USER_SCHEMA,
     libraries=[
         PipelineLibrary(
             notebook=NotebookLibrary(path=pipeline_notebook)
         )
     ],
     configuration={
-        "pipeline.catalog": SHARED_CATALOG,
-        "pipeline.schema": SHARED_SCHEMA,
-        "pipeline.user_id": USER_ID
+        "pipeline.catalog": USER_CATALOG,
+        "pipeline.schema": USER_SCHEMA
     },
     serverless=True,
     continuous=False
@@ -264,7 +267,7 @@ pipeline = w.pipelines.create(
 
 print(f"Created pipeline: {pipeline.pipeline_id}")
 print(f"  Name: {USER_ID}_illumia_pipeline")
-print(f"  Target: {SHARED_CATALOG}.{USER_ID}")
+print(f"  Target: {USER_CATALOG}.{USER_SCHEMA}")
 
 # COMMAND ----------
 
@@ -296,7 +299,7 @@ print("")
 print("Pipeline complete!")
 print("")
 print("Tables created:")
-for table in spark.catalog.listTables(f"{SHARED_CATALOG}.{USER_ID}"):
+for table in spark.catalog.listTables(f"{USER_CATALOG}.{USER_SCHEMA}"):
     print(f"  - {table.name}")
 
 # COMMAND ----------
@@ -320,7 +323,7 @@ from pyspark.sql.window import Window
 window_spec = Window.partitionBy("patron_type_clean").orderBy(desc("engagement_score"))
 
 top_engaged = (
-    spark.table(f"{SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_cardholder_360")
+    spark.table(f"{USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360")
     .withColumn("rank", row_number().over(window_spec))
     .filter(col("rank") <= 5)
     .select(
@@ -343,7 +346,7 @@ display(top_engaged)
 date_window = Window.partitionBy("merchant_name").orderBy("transaction_date")
 
 location_trends = (
-    spark.table(f"{SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_location_analytics")
+    spark.table(f"{USER_CATALOG}.{USER_SCHEMA}.gold_location_analytics")
     .withColumn("prev_day_revenue", lag("total_revenue").over(date_window))
     .withColumn("revenue_change", col("total_revenue") - col("prev_day_revenue"))
     .withColumn("change_pct",
@@ -368,7 +371,7 @@ display(location_trends.limit(20))
 
 # Food waste analysis - identify optimization opportunities
 waste_analysis = (
-    spark.table(f"{SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_dining_operations")
+    spark.table(f"{USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations")
     .groupBy("location_name")
     .agg(
         avg("waste_percentage").alias("avg_waste_pct"),
@@ -388,7 +391,7 @@ display(waste_analysis)
 # Cross-domain insight: Spending patterns by housing area
 print("Cross-domain insight: Spending patterns by housing area")
 display(
-    spark.table(f"{SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_behavior_patterns")
+    spark.table(f"{USER_CATALOG}.{USER_SCHEMA}.gold_behavior_patterns")
     .orderBy(desc("avg_spend_per_customer"))
 )
 
@@ -422,7 +425,7 @@ SELECT
     SUM(total_revenue) AS total_revenue,
     SUM(transaction_count) AS total_transactions,
     ROUND(AVG(avg_transaction), 2) AS avg_transaction_value
-FROM {SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_location_analytics
+FROM {USER_CATALOG}.{USER_SCHEMA}.gold_location_analytics
 GROUP BY merchant_name, merchant_category
 ORDER BY total_revenue DESC
 LIMIT 15
@@ -442,7 +445,7 @@ SELECT
     ROUND(AVG(waste_percentage), 1) AS avg_waste_pct,
     SUM(total_wasted) AS total_portions_wasted,
     ROUND(AVG(efficiency_rate), 1) AS avg_efficiency_rate
-FROM {SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_dining_operations
+FROM {USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations
 GROUP BY location_name, meal_period
 ORDER BY location_name, meal_period
 """
@@ -461,7 +464,7 @@ SELECT
     COUNT(*) AS cardholder_count,
     ROUND(AVG(engagement_score), 1) AS avg_engagement_score,
     ROUND(AVG(total_spend), 2) AS avg_total_spend
-FROM {SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_cardholder_360
+FROM {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
 WHERE is_active = true
 GROUP BY engagement_tier, patron_type_clean
 ORDER BY engagement_tier, cardholder_count DESC
@@ -482,7 +485,7 @@ SELECT
     ROUND(total_spend, 2) AS total_spend,
     ROUND(avg_spend_per_customer, 2) AS avg_spend_per_customer,
     ROUND(weekend_ratio * 100, 1) AS weekend_pct
-FROM {SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_behavior_patterns
+FROM {USER_CATALOG}.{USER_SCHEMA}.gold_behavior_patterns
 WHERE housing_area IS NOT NULL
 ORDER BY avg_spend_per_customer DESC
 """
@@ -512,10 +515,10 @@ display(spark.sql(query4))
 
 # Tables to add to your Genie Space
 gold_tables = [
-    f"{SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_cardholder_360",
-    f"{SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_location_analytics",
-    f"{SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_dining_operations",
-    f"{SHARED_CATALOG}.{USER_ID}.{USER_ID}_gold_behavior_patterns",
+    f"{USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360",
+    f"{USER_CATALOG}.{USER_SCHEMA}.gold_location_analytics",
+    f"{USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations",
+    f"{USER_CATALOG}.{USER_SCHEMA}.gold_behavior_patterns",
 ]
 
 print("Add these tables to your Genie Space:")
@@ -577,7 +580,7 @@ print("="*60)
 print(app_yaml_content)
 
 # Write to the app folder
-app_yaml_path = f"/Workspace/Users/{USER_EMAIL}/illumia-workshop/app/app.yaml"
+app_yaml_path = f"{WORKSHOP_PATH}/app/app.yaml"
 
 with open(app_yaml_path.replace("/Workspace", "/Workspace"), "w") as f:
     f.write(app_yaml_content)
@@ -592,7 +595,7 @@ from databricks.sdk import WorkspaceClient
 w = WorkspaceClient()
 
 app_name = f"illumia-{USER_ID.replace('_', '-')}"
-app_path = f"/Workspace/Users/{USER_EMAIL}/illumia-workshop/app"
+app_path = f"{WORKSHOP_PATH}/app"
 
 print(f"Deploying app: {app_name}")
 print(f"Source: {app_path}")
@@ -651,13 +654,14 @@ print("="*60)
 print("WORKSHOP SUMMARY")
 print("="*60)
 print("")
-print(f"Schema:    {SHARED_CATALOG}.{USER_ID}")
+print(f"Catalog:   {USER_CATALOG}")
+print(f"Schema:    {USER_CATALOG}.{USER_SCHEMA}")
 print(f"Pipeline:  {USER_ID}_illumia_pipeline")
 print(f"Job:       {USER_ID}_illumia_data_generation")
 print(f"App:       illumia-{USER_ID.replace('_', '-')}")
 print("")
 print("Tables created:")
-for table in spark.catalog.listTables(f"{SHARED_CATALOG}.{USER_ID}"):
+for table in spark.catalog.listTables(f"{USER_CATALOG}.{USER_SCHEMA}"):
     print(f"  - {table.name}")
 print("")
 print("="*60)
@@ -703,8 +707,8 @@ print("="*60)
 #
 # # Delete schema (this drops all tables)
 # try:
-#     spark.sql(f"DROP SCHEMA IF EXISTS {SHARED_CATALOG}.{USER_ID} CASCADE")
-#     print(f"Deleted schema: {SHARED_CATALOG}.{USER_ID}")
+#     spark.sql(f"DROP SCHEMA IF EXISTS {USER_CATALOG}.{USER_SCHEMA} CASCADE")
+#     print(f"Deleted schema: {USER_CATALOG}.{USER_SCHEMA}")
 # except Exception as e:
 #     print(f"Schema cleanup: {e}")
 #
