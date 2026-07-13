@@ -23,20 +23,6 @@ Build a production-ready data platform in ~2.5 hours:
 | CS Access | Building entry/exit events |
 | NetMenu | Dining hall operations and waste |
 
-## Workshop Steps
-
-| Step | Description | Duration |
-|------|-------------|----------|
-| 1 | Copy git repo to personal folder | 5 min |
-| 2 | Create catalog/schema/volume | 5 min |
-| 3 | Run data generation via Lakeflow Job | 15 min |
-| 4 | Explore generated data | 10 min |
-| 5 | Create Declarative Pipeline | 20 min |
-| 6 | Explore gold tables | 15 min |
-| 7 | Create Lakeview Dashboard | 15 min |
-| 8 | Setup Genie Agent | 15 min |
-| 9 | Deploy Databricks App | 20 min |
-
 ## Repository Structure
 
 ```
