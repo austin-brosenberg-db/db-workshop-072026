@@ -78,10 +78,11 @@ export default function DashboardEmbed() {
   const [canEmbed, setCanEmbed] = useState(false)
 
   useEffect(() => {
-    // Check if we're on a databricks.com domain (where embedding is allowed)
+    // Check if we're on a Databricks domain (where embedding is allowed)
     const hostname = window.location.hostname
     const isDatabricksDomain = hostname.endsWith('.databricks.com') ||
-                                hostname.endsWith('.azuredatabricks.net')
+                                hostname.endsWith('.azuredatabricks.net') ||
+                                hostname.endsWith('.databricksapps.com')
     setCanEmbed(isDatabricksDomain)
 
     if (!isDatabricksDomain) {
