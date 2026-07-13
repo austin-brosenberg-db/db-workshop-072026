@@ -64,7 +64,7 @@ print(f"Your resources will be created in: {USER_CATALOG}.{USER_SCHEMA}")
 
 # COMMAND ----------
 
-WORKSHOP_PATH = # fill in with github folder path
+WORKSHOP_PATH = "" # fill in with github folder path
 
 # COMMAND ----------
 
