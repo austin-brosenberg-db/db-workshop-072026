@@ -708,6 +708,7 @@ print(f"Updated: {app_yaml_path}")
 
 # Deploy the app
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.apps import App, AppDeployment
 
 w = WorkspaceClient()
 
@@ -720,10 +721,10 @@ print("")
 
 # Create the app
 try:
-    app = w.apps.create_and_wait(
+    app = w.apps.create_and_wait(app=App(
         name=app_name,
         description="Illumia Campus Analytics with Genie Agent"
-    )
+    ))
     print(f"Created app: {app.name}")
 except Exception as e:
     if "already exists" in str(e).lower():
@@ -737,7 +738,7 @@ print("")
 print("Deploying code...")
 deployment = w.apps.deploy_and_wait(
     app_name=app_name,
-    source_code_path=app_path
+    app_deployment=AppDeployment(source_code_path=app_path)
 )
 
 print(f"Deployment status: {deployment.status}")
