@@ -237,14 +237,17 @@ display(
 # COMMAND ----------
 
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.pipelines import PipelineLibrary, NotebookLibrary
+from databricks.sdk.service.pipelines import PipelineLibrary, NotebookLibrary, PipelineCluster
 
 w = WorkspaceClient()
 
 # Path to the declarative pipeline notebook
 pipeline_notebook = f"{WORKSHOP_PATH}/notebooks/02_declarative_pipeline"
 
-# Create the pipeline
+# Shared cluster ID for pipeline execution
+PIPELINE_CLUSTER_ID = ""  # fill in with shared cluster ID
+
+# Create the pipeline using shared cluster
 pipeline = w.pipelines.create(
     name=f"{USER_ID}_illumia_pipeline",
     catalog=USER_CATALOG,
@@ -258,7 +261,12 @@ pipeline = w.pipelines.create(
         "pipeline.catalog": USER_CATALOG,
         "pipeline.schema": USER_SCHEMA
     },
-    serverless=True,
+    clusters=[
+        PipelineCluster(
+            label="default",
+            existing_cluster_id=PIPELINE_CLUSTER_ID
+        )
+    ],
     continuous=False
 )
 
