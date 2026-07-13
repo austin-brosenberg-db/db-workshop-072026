@@ -244,10 +244,7 @@ w = WorkspaceClient()
 # Path to the declarative pipeline notebook
 pipeline_notebook = f"{WORKSHOP_PATH}/notebooks/02_declarative_pipeline"
 
-# Shared cluster ID for pipeline execution
-PIPELINE_CLUSTER_ID = ""  # fill in with shared cluster ID
-
-# Create the pipeline using shared cluster
+# Create the pipeline with on-demand cluster
 pipeline = w.pipelines.create(
     name=f"{USER_ID}_illumia_pipeline",
     catalog=USER_CATALOG,
@@ -264,7 +261,13 @@ pipeline = w.pipelines.create(
     clusters=[
         PipelineCluster(
             label="default",
-            existing_cluster_id=PIPELINE_CLUSTER_ID
+            num_workers=1,
+            node_type_id="i3.xlarge",
+            spark_conf={
+                "spark.databricks.cluster.profile": "singleNode",
+                "spark.master": "local[*]"
+            },
+            custom_tags={"ResourceClass": "SingleNode"}
         )
     ],
     continuous=False
