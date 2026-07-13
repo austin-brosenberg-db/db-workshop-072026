@@ -7,7 +7,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from .config import get_workspace_host, get_auth_token, GENIE_SPACE_ID
+from .config import (
+    get_workspace_host,
+    get_auth_token,
+    get_dashboard_embed_url,
+    GENIE_SPACE_ID,
+    DASHBOARD_ID,
+)
 from .genie_client import GenieClient
 
 app = FastAPI(title="Illumia Genie Portal")
@@ -117,6 +123,16 @@ async def get_results(
 async def health():
     """Health check endpoint."""
     return {"status": "healthy", "genie_space_id": GENIE_SPACE_ID}
+
+
+@app.get("/api/config")
+async def get_config():
+    """Return app configuration for frontend."""
+    return {
+        "genie_space_id": GENIE_SPACE_ID,
+        "dashboard_id": DASHBOARD_ID,
+        "dashboard_url": get_dashboard_embed_url(),
+    }
 
 
 # Serve static files (React build) in production

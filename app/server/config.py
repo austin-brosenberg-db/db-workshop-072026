@@ -6,8 +6,38 @@ from typing import Optional
 # Detect if running in Databricks App context
 IS_DATABRICKS_APP = bool(os.environ.get("DATABRICKS_APP_NAME"))
 
-# Genie Space ID from app resource
-GENIE_SPACE_ID = os.environ.get("GENIE_SPACE_ID", "01f17eb9d71413c99a1aa2e5716ddf23")
+# Required environment variables
+GENIE_SPACE_ID = os.environ.get("GENIE_SPACE_ID")
+DASHBOARD_ID = os.environ.get("DASHBOARD_ID")
+
+
+def get_workspace_id() -> str:
+    """Get the workspace ID for embed URLs."""
+    from databricks.sdk import WorkspaceClient
+
+    if IS_DATABRICKS_APP:
+        client = WorkspaceClient()
+    else:
+        profile = os.environ.get("DATABRICKS_PROFILE", "illumia-demo")
+        client = WorkspaceClient(profile=profile)
+
+    return str(client.get_workspace_id())
+
+
+def get_dashboard_embed_url() -> Optional[str]:
+    """Construct the full dashboard embed URL."""
+    if not DASHBOARD_ID:
+        return None
+
+    host = get_workspace_host()
+    workspace_id = get_workspace_id()
+
+    # Remove trailing slash and ensure https://
+    host = host.rstrip("/")
+    if not host.startswith("http"):
+        host = f"https://{host}"
+
+    return f"{host}/embed/dashboardsv3/{DASHBOARD_ID}?o={workspace_id}"
 
 
 def get_workspace_host() -> str:

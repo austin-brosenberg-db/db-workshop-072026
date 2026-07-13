@@ -68,14 +68,38 @@ const styles = {
     color: '#888',
     maxWidth: '400px',
   },
+  error: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    color: '#d32f2f',
+    textAlign: 'center' as const,
+    padding: '40px',
+  },
+  errorIcon: {
+    fontSize: '48px',
+    marginBottom: '16px',
+  },
+  errorText: {
+    fontSize: '14px',
+    maxWidth: '400px',
+  },
 }
 
-// Dashboard configuration - correct embed URL format
-const DASHBOARD_URL = 'https://fevm-illumia-demo.cloud.databricks.com/embed/dashboardsv3/01f17d4496921f258f21500e4029ce2c?o=7474656906295934'
+interface AppConfig {
+  dashboard_url: string | null
+  dashboard_id: string | null
+  genie_space_id: string | null
+}
 
 export default function DashboardEmbed() {
   const [loading, setLoading] = useState(true)
+  const [iframeLoading, setIframeLoading] = useState(true)
   const [canEmbed, setCanEmbed] = useState(false)
+  const [dashboardUrl, setDashboardUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Check if we're on a Databricks domain (where embedding is allowed)
@@ -85,13 +109,66 @@ export default function DashboardEmbed() {
                                 hostname.endsWith('.databricksapps.com')
     setCanEmbed(isDatabricksDomain)
 
-    if (!isDatabricksDomain) {
-      setLoading(false)
-    }
+    // Fetch dashboard URL from backend config
+    fetch('/api/config')
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch config')
+        return res.json()
+      })
+      .then((config: AppConfig) => {
+        if (config.dashboard_url) {
+          setDashboardUrl(config.dashboard_url)
+        } else {
+          setError('Dashboard not configured. Please set DASHBOARD_ID environment variable.')
+        }
+        setLoading(false)
+      })
+      .catch(err => {
+        setError(`Failed to load configuration: ${err.message}`)
+        setLoading(false)
+      })
   }, [])
 
-  const handleLoad = () => {
-    setLoading(false)
+  const handleIframeLoad = () => {
+    setIframeLoading(false)
+  }
+
+  // Loading state while fetching config
+  if (loading) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.loading}>Loading dashboard configuration...</div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.error}>
+          <div style={styles.errorIcon}>!</div>
+          <div style={styles.fallbackTitle}>Configuration Error</div>
+          <div style={styles.errorText}>{error}</div>
+        </div>
+      </div>
+    )
+  }
+
+  // No dashboard URL configured
+  if (!dashboardUrl) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.fallback}>
+          <div style={styles.fallbackIcon}>!</div>
+          <div style={styles.fallbackTitle}>Dashboard Not Configured</div>
+          <div style={styles.fallbackText}>
+            The DASHBOARD_ID environment variable is not set.
+            Please configure it in app.yaml and redeploy.
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Show fallback with link when not on Databricks domain
@@ -99,21 +176,21 @@ export default function DashboardEmbed() {
     return (
       <div style={styles.container}>
         <div style={styles.fallback}>
-          <div style={styles.fallbackIcon}>📊</div>
+          <div style={styles.fallbackIcon}>!</div>
           <div style={styles.fallbackTitle}>Illumia Campus Analytics Dashboard</div>
           <div style={styles.fallbackText}>
             The dashboard opens in a new tab due to security restrictions.
             When this app is deployed to Databricks, the dashboard will be embedded directly.
           </div>
           <a
-            href={DASHBOARD_URL}
+            href={dashboardUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={styles.link}
             onMouseOver={e => (e.currentTarget.style.background = '#2d5a87')}
             onMouseOut={e => (e.currentTarget.style.background = '#1e3a5f')}
           >
-            Open Dashboard ↗
+            Open Dashboard
           </a>
           <div style={styles.note}>
             Dashboard includes: Revenue by Location, Food Waste Analysis,
@@ -126,16 +203,16 @@ export default function DashboardEmbed() {
 
   return (
     <div style={styles.container}>
-      {loading && (
+      {iframeLoading && (
         <div style={styles.loading}>Loading dashboard...</div>
       )}
       <iframe
-        src={DASHBOARD_URL}
+        src={dashboardUrl}
         style={{
           ...styles.iframe,
-          display: loading ? 'none' : 'block',
+          display: iframeLoading ? 'none' : 'block',
         }}
-        onLoad={handleLoad}
+        onLoad={handleIframeLoad}
         title="Illumia Campus Analytics Dashboard"
         allow="fullscreen"
       />
