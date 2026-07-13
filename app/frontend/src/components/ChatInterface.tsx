@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useGenie, Message } from '../hooks/useGenie'
+import { useGenie } from '../hooks/useGenie'
 import MessageBubble from './MessageBubble'
 
 const styles = {
