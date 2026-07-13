@@ -6,7 +6,7 @@ const styles = {
   container: {
     display: 'flex',
     flexDirection: 'column' as const,
-    height: 'calc(100vh - 140px)',
+    height: '100%',
     background: 'white',
     borderRadius: '12px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
