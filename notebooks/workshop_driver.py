@@ -313,84 +313,86 @@ for table in spark.catalog.listTables(f"{USER_CATALOG}.{USER_SCHEMA}"):
 
 # COMMAND ----------
 
-from pyspark.sql.functions import col, desc, row_number, avg, sum, lag
-from pyspark.sql.window import Window
-
-# Top engaged cardholders by patron type
-window_spec = Window.partitionBy("patron_type_clean").orderBy(desc("engagement_score"))
-
-top_engaged = (
-    spark.table(f"{USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360")
-    .withColumn("rank", row_number().over(window_spec))
-    .filter(col("rank") <= 5)
-    .select(
-        "patron_type_clean",
-        "rank",
-        "cardholder_id",
-        "engagement_score",
-        "total_spend",
-        "total_transactions",
-        "unique_buildings"
-    )
-)
-
+# Top engaged cardholders by patron type (using window function)
 print("Top 5 engaged cardholders by patron type:")
-display(top_engaged)
+display(spark.sql(f"""
+SELECT
+    patron_type_clean,
+    rank,
+    cardholder_id,
+    engagement_score,
+    total_spend,
+    total_transactions,
+    unique_buildings
+FROM (
+    SELECT
+        patron_type_clean,
+        cardholder_id,
+        engagement_score,
+        total_spend,
+        total_transactions,
+        unique_buildings,
+        ROW_NUMBER() OVER (PARTITION BY patron_type_clean ORDER BY engagement_score DESC) as rank
+    FROM {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+)
+WHERE rank <= 5
+ORDER BY patron_type_clean, rank
+"""))
 
 # COMMAND ----------
 
-# Revenue trends with day-over-day change
-date_window = Window.partitionBy("merchant_name").orderBy("transaction_date")
-
-location_trends = (
-    spark.table(f"{USER_CATALOG}.{USER_SCHEMA}.gold_location_analytics")
-    .withColumn("prev_day_revenue", lag("total_revenue").over(date_window))
-    .withColumn("revenue_change", col("total_revenue") - col("prev_day_revenue"))
-    .withColumn("change_pct",
-        ((col("total_revenue") - col("prev_day_revenue")) / col("prev_day_revenue") * 100)
-    )
-    .filter(col("prev_day_revenue").isNotNull())
-    .select(
-        "merchant_name",
-        "transaction_date",
-        "total_revenue",
-        "revenue_change",
-        "change_pct",
-        "unique_customers"
-    )
-    .orderBy("merchant_name", "transaction_date")
-)
-
+# Revenue trends with day-over-day change (using LAG window function)
 print("Location revenue with day-over-day trends:")
-display(location_trends.limit(20))
+display(spark.sql(f"""
+SELECT
+    merchant_name,
+    transaction_date,
+    total_revenue,
+    revenue_change,
+    ROUND(change_pct, 1) as change_pct,
+    unique_customers
+FROM (
+    SELECT
+        merchant_name,
+        transaction_date,
+        total_revenue,
+        unique_customers,
+        total_revenue - LAG(total_revenue) OVER (PARTITION BY merchant_name ORDER BY transaction_date) as revenue_change,
+        ((total_revenue - LAG(total_revenue) OVER (PARTITION BY merchant_name ORDER BY transaction_date))
+            / LAG(total_revenue) OVER (PARTITION BY merchant_name ORDER BY transaction_date) * 100) as change_pct
+    FROM {USER_CATALOG}.{USER_SCHEMA}.gold_location_analytics
+)
+WHERE revenue_change IS NOT NULL
+ORDER BY merchant_name, transaction_date
+LIMIT 20
+"""))
 
 # COMMAND ----------
 
 # Food waste analysis - identify optimization opportunities
-waste_analysis = (
-    spark.table(f"{USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations")
-    .groupBy("location_name")
-    .agg(
-        avg("waste_percentage").alias("avg_waste_pct"),
-        sum("total_wasted").alias("total_portions_wasted"),
-        avg("efficiency_rate").alias("avg_efficiency"),
-        sum("total_food_cost").alias("total_cost")
-    )
-    .withColumn("potential_savings", col("total_cost") * (col("avg_waste_pct") / 100))
-    .orderBy(desc("avg_waste_pct"))
-)
-
 print("Food waste analysis - optimization opportunities:")
-display(waste_analysis)
+display(spark.sql(f"""
+SELECT
+    location_name,
+    ROUND(AVG(waste_percentage), 1) as avg_waste_pct,
+    SUM(total_wasted) as total_portions_wasted,
+    ROUND(AVG(efficiency_rate), 1) as avg_efficiency,
+    ROUND(SUM(total_food_cost), 2) as total_cost,
+    ROUND(SUM(total_food_cost) * (AVG(waste_percentage) / 100), 2) as potential_savings
+FROM {USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations
+GROUP BY location_name
+ORDER BY avg_waste_pct DESC
+"""))
 
 # COMMAND ----------
 
 # Cross-domain insight: Spending patterns by housing area
 print("Cross-domain insight: Spending patterns by housing area")
-display(
-    spark.table(f"{USER_CATALOG}.{USER_SCHEMA}.gold_behavior_patterns")
-    .orderBy(desc("avg_spend_per_customer"))
-)
+display(spark.sql(f"""
+SELECT *
+FROM {USER_CATALOG}.{USER_SCHEMA}.gold_behavior_patterns
+ORDER BY avg_spend_per_customer DESC
+"""))
 
 # COMMAND ----------
 
@@ -404,13 +406,7 @@ display(
 # MAGIC 3. **Engagement Distribution** - gold_cardholder_360
 # MAGIC 4. **Spending by Housing** - gold_behavior_patterns
 # MAGIC
-# MAGIC ### Instructions
-# MAGIC 1. Go to **Dashboards** in left sidebar
-# MAGIC 2. Click **Create Dashboard**
-# MAGIC 3. Name it: `Illumia Analytics - {USER_ID}`
-# MAGIC 4. Add widgets using the queries below
-# MAGIC 5. **Save** and **Publish** the dashboard
-# MAGIC 6. Copy the **Dashboard ID** from the URL for Step 9
+# MAGIC First, we'll define the queries, then create the dashboard programmatically using the SDK.
 
 # COMMAND ----------
 
@@ -493,6 +489,130 @@ display(spark.sql(query4))
 
 # COMMAND ----------
 
+# Create the dashboard using the Lakeview API
+import json
+from databricks.sdk import WorkspaceClient
+
+w = WorkspaceClient()
+
+dashboard_name = f"Illumia Analytics - {USER_ID}"
+
+# Define the dashboard with datasets and widgets
+dashboard_definition = {
+    "datasets": [
+        {
+            "name": "revenue_by_location",
+            "displayName": "Revenue by Location",
+            "query": query1.strip()
+        },
+        {
+            "name": "food_waste",
+            "displayName": "Food Waste by Dining Hall",
+            "query": query2.strip()
+        },
+        {
+            "name": "engagement_distribution",
+            "displayName": "Engagement Distribution",
+            "query": query3.strip()
+        },
+        {
+            "name": "spending_by_housing",
+            "displayName": "Spending by Housing Area",
+            "query": query4.strip()
+        }
+    ],
+    "pages": [
+        {
+            "name": "main",
+            "displayName": "Campus Analytics",
+            "layout": [
+                {
+                    "widget": {
+                        "name": "revenue_chart",
+                        "queries": [{"name": "revenue_by_location", "query": {"datasetName": "revenue_by_location"}}],
+                        "spec": {
+                            "version": 2,
+                            "widgetType": "bar",
+                            "encodings": {
+                                "x": {"fieldName": "merchant_name", "displayName": "Merchant"},
+                                "y": {"fieldName": "total_revenue", "displayName": "Total Revenue"}
+                            }
+                        }
+                    },
+                    "position": {"x": 0, "y": 0, "width": 3, "height": 2}
+                },
+                {
+                    "widget": {
+                        "name": "waste_chart",
+                        "queries": [{"name": "food_waste", "query": {"datasetName": "food_waste"}}],
+                        "spec": {
+                            "version": 2,
+                            "widgetType": "bar",
+                            "encodings": {
+                                "x": {"fieldName": "location_name", "displayName": "Location"},
+                                "y": {"fieldName": "avg_waste_pct", "displayName": "Avg Waste %"},
+                                "color": {"fieldName": "meal_period", "displayName": "Meal Period"}
+                            }
+                        }
+                    },
+                    "position": {"x": 3, "y": 0, "width": 3, "height": 2}
+                },
+                {
+                    "widget": {
+                        "name": "engagement_chart",
+                        "queries": [{"name": "engagement_distribution", "query": {"datasetName": "engagement_distribution"}}],
+                        "spec": {
+                            "version": 2,
+                            "widgetType": "pie",
+                            "encodings": {
+                                "theta": {"fieldName": "cardholder_count", "displayName": "Count"},
+                                "color": {"fieldName": "engagement_tier", "displayName": "Engagement Tier"}
+                            }
+                        }
+                    },
+                    "position": {"x": 0, "y": 2, "width": 3, "height": 2}
+                },
+                {
+                    "widget": {
+                        "name": "housing_chart",
+                        "queries": [{"name": "spending_by_housing", "query": {"datasetName": "spending_by_housing"}}],
+                        "spec": {
+                            "version": 2,
+                            "widgetType": "bar",
+                            "encodings": {
+                                "x": {"fieldName": "housing_area", "displayName": "Housing Area"},
+                                "y": {"fieldName": "avg_spend_per_customer", "displayName": "Avg Spend per Customer"}
+                            }
+                        }
+                    },
+                    "position": {"x": 3, "y": 2, "width": 3, "height": 2}
+                }
+            ]
+        }
+    ]
+}
+
+# Create the dashboard
+dashboard = w.lakeview.create(
+    display_name=dashboard_name,
+    serialized_dashboard=json.dumps(dashboard_definition),
+    parent_path=f"/Workspace/Users/{USER_EMAIL}"
+)
+
+DASHBOARD_ID = dashboard.dashboard_id
+print(f"Created dashboard: {dashboard_name}")
+print(f"Dashboard ID: {DASHBOARD_ID}")
+print(f"")
+print(f"View at: {w.config.host}sql/dashboardsv3/{DASHBOARD_ID}")
+
+# COMMAND ----------
+
+# Publish the dashboard
+w.lakeview.publish(dashboard_id=DASHBOARD_ID)
+print(f"Published dashboard: {DASHBOARD_ID}")
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ---
 # MAGIC ## Step 8: Setup Genie Agent
@@ -539,13 +659,13 @@ print("  - Show me cardholders with high engagement scores")
 # MAGIC Deploy the app with embedded dashboard and Genie Agent chat interface.
 # MAGIC
 # MAGIC ### Prerequisites
-# MAGIC - Dashboard ID from Step 7
+# MAGIC - Dashboard ID (already set from Step 7)
 # MAGIC - Genie Space ID from Step 8
 
 # COMMAND ----------
 
-# IMPORTANT: Replace these with your actual IDs from Steps 7 and 8
-DASHBOARD_ID = "YOUR_DASHBOARD_ID_HERE"  # e.g., "01f17d4496921f258f21500e4029ce2c"
+# DASHBOARD_ID was set in Step 7 when we created the dashboard
+# IMPORTANT: Replace GENIE_SPACE_ID with your actual ID from Step 8
 GENIE_SPACE_ID = "YOUR_GENIE_SPACE_ID_HERE"  # e.g., "01f17eb9d71413c99a1aa2e5716ddf23"
 
 print("Configuration for app deployment:")
@@ -553,8 +673,8 @@ print("="*60)
 print(f"  DASHBOARD_ID:   {DASHBOARD_ID}")
 print(f"  GENIE_SPACE_ID: {GENIE_SPACE_ID}")
 print("")
-if "YOUR_" in DASHBOARD_ID or "YOUR_" in GENIE_SPACE_ID:
-    print("WARNING: Please replace the placeholder values above with your actual IDs!")
+if "YOUR_" in GENIE_SPACE_ID:
+    print("WARNING: Please replace GENIE_SPACE_ID with your actual ID from Step 8!")
 
 # COMMAND ----------
 
