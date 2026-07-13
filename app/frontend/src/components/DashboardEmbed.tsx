@@ -70,8 +70,8 @@ const styles = {
   },
 }
 
-// Dashboard configuration
-const DASHBOARD_URL = 'https://fevm-illumia-demo.cloud.databricks.com/dashboardsv3/01f17d4496921f258f21500e4029ce2c/published?o=7474656906295934'
+// Dashboard configuration - correct embed URL format
+const DASHBOARD_URL = 'https://fevm-illumia-demo.cloud.databricks.com/embed/dashboardsv3/01f17d4496921f258f21500e4029ce2c?o=7474656906295934'
 
 export default function DashboardEmbed() {
   const [loading, setLoading] = useState(true)
