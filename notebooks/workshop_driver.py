@@ -36,43 +36,35 @@
 
 # COMMAND ----------
 
+dbutils.widgets.text("catalog", "illumia_demo_catalog")
+dbutils.widgets.text("schema", "workshop_data")
+
+# COMMAND ----------
+
 # Derive participant ID from username
 user_email = spark.sql("SELECT current_user()").first()[0]
 USER_ID = user_email.split("@")[0].replace(".", "_").replace("-", "_")
 USER_EMAIL = user_email
 
-# Configuration
-SHARED_CATALOG = "illumia_demo_catalog"
-SHARED_SCHEMA = "workshop_data"
-WORKSHOP_REPO_PATH = "/Workspace/Shared/illumia-workshop"
+USER_CATALOG = dbutils.widgets.get("catalog")
+USER_SCHEMA = dbutils.widgets.get("schema")
 
 print(f"Welcome, {USER_ID}!")
 print(f"Email: {USER_EMAIL}")
 print(f"")
-print(f"Your resources will be created in: {SHARED_CATALOG}.{USER_ID}")
+print(f"Your resources will be created in: {USER_CATALOG}.{USER_SCHEMA}")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ---
-# MAGIC ## Step 1: Copy Workshop Repository
+# MAGIC ## Step 1: Create GitHub Folder
 # MAGIC
 # MAGIC Each participant gets their own copy of the workshop assets.
 
 # COMMAND ----------
 
-# Define paths
-source_path = WORKSHOP_REPO_PATH
-dest_path = f"/Workspace/Users/{USER_EMAIL}/illumia-workshop"
-
-# Copy the repository
-dbutils.fs.cp(source_path, dest_path, recurse=True)
-
-print(f"Copied workshop repo to: {dest_path}")
-print(f"")
-print(f"Contents:")
-for item in dbutils.fs.ls(dest_path):
-    print(f"  - {item.name}")
+WORKSHOP_PATH = # fill in with github folder path
 
 # COMMAND ----------
 
@@ -84,19 +76,22 @@ for item in dbutils.fs.ls(dest_path):
 
 # COMMAND ----------
 
+# Create personal catalog
+spark.sql(f"CREATE CATALOG IF NOT EXISTS {USER_CATALOG}")
+
 # Create personal schema
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SHARED_CATALOG}.{USER_ID}")
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {USER_CATALOG}.{USER_SCHEMA}")
 
 # Create checkpoint volume for pipeline state
 spark.sql(f"""
-    CREATE VOLUME IF NOT EXISTS {SHARED_CATALOG}.{USER_ID}.checkpoints
+    CREATE VOLUME IF NOT EXISTS {USER_CATALOG}.{USER_SCHEMA}.checkpoints
 """)
 
 # Set context
-spark.sql(f"USE CATALOG {SHARED_CATALOG}")
-spark.sql(f"USE SCHEMA {USER_ID}")
+spark.sql(f"USE CATALOG {USER_CATALOG}")
+spark.sql(f"USE SCHEMA {USER_SCHEMA}")
 
-CHECKPOINT_PATH = f"/Volumes/{SHARED_CATALOG}/{USER_ID}/checkpoints"
+CHECKPOINT_PATH = f"/Volumes/{USER_CATALOG}/{USER_SCHEMA}/checkpoints"
 
 print(f"Created schema: {SHARED_CATALOG}.{USER_ID}")
 print(f"Created volume: {CHECKPOINT_PATH}")
@@ -117,7 +112,7 @@ from databricks.sdk.service.jobs import Task, NotebookTask, Source
 w = WorkspaceClient()
 
 # Path to data generation notebook
-notebook_path = f"/Workspace/Users/{USER_EMAIL}/illumia-workshop/notebooks/01_generate_data.py"
+notebook_path = f"{WORKSHOP_PATH}/notebooks/01_generate_data.py"
 
 # Create job
 job = w.jobs.create(
