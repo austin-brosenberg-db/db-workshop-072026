@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 const styles = {
   container: {
@@ -60,36 +60,12 @@ const styles = {
 }
 
 // Dashboard configuration
-const DASHBOARD_ID = '01f17d4496921f258f21500e4029ce2c'
+const DASHBOARD_URL = 'https://fevm-illumia-demo.cloud.databricks.com/dashboardsv3/01f17d4496921f258f21500e4029ce2c/published?o=7474656906295934'
 
 export default function DashboardEmbed() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [dashboardUrl, setDashboardUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    // Get the workspace host from the current URL or API
-    const getWorkspaceHost = async () => {
-      try {
-        // Try to get host from API
-        const response = await fetch('/api/health')
-        if (response.ok) {
-          // In production, the app runs on the same domain as the workspace
-          // Use relative URL for embed
-          const host = window.location.origin
-          setDashboardUrl(`${host}/embed/dashboards/${DASHBOARD_ID}`)
-        } else {
-          // Fallback to known workspace URL
-          setDashboardUrl(`https://fevm-illumia-demo.cloud.databricks.com/embed/dashboards/${DASHBOARD_ID}`)
-        }
-      } catch {
-        // Fallback
-        setDashboardUrl(`https://fevm-illumia-demo.cloud.databricks.com/embed/dashboards/${DASHBOARD_ID}`)
-      }
-    }
-
-    getWorkspaceHost()
-  }, [])
+  const dashboardUrl = DASHBOARD_URL
 
   const handleLoad = () => {
     setLoading(false)
@@ -98,14 +74,6 @@ export default function DashboardEmbed() {
   const handleError = () => {
     setLoading(false)
     setError(true)
-  }
-
-  if (!dashboardUrl) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.loading}>Loading dashboard...</div>
-      </div>
-    )
   }
 
   if (error) {
