@@ -1,0 +1,9 @@
+command:
+  - uvicorn
+  - server.main:app
+  - --host=0.0.0.0
+  - --port=8000
+
+env:
+  - name: GENIE_SPACE_ID
+    value: "01f17eb9d71413c99a1aa2e5716ddf23"
