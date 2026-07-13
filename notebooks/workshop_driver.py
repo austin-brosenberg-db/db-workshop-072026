@@ -72,14 +72,11 @@ WORKSHOP_PATH = "" # fill in with github folder path
 # MAGIC ---
 # MAGIC ## Step 2: Create Your Personal Namespace
 # MAGIC
-# MAGIC Each participant gets an isolated schema within the shared catalog.
+# MAGIC Each participant creates their own schema within the pre-provisioned catalog.
 
 # COMMAND ----------
 
-# Create personal catalog
-spark.sql(f"CREATE CATALOG IF NOT EXISTS {USER_CATALOG}")
-
-# Create personal schema
+# Create personal schema (catalog must already exist)
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {USER_CATALOG}.{USER_SCHEMA}")
 
 # Create checkpoint volume for pipeline state
