@@ -3,25 +3,53 @@
 import os
 from typing import Optional
 
-# Detect if running in Databricks App context
-IS_DATABRICKS_APP = bool(os.environ.get("DATABRICKS_APP_NAME"))
+# Check for Databricks environment - DATABRICKS_HOST is set in Databricks Apps
+DATABRICKS_HOST_ENV = os.environ.get("DATABRICKS_HOST")
+DATABRICKS_APP_NAME = os.environ.get("DATABRICKS_APP_NAME")
+
+# We're in Databricks if DATABRICKS_HOST is set (more reliable than checking APP_NAME)
+IS_DATABRICKS_ENV = bool(DATABRICKS_HOST_ENV)
 
 # Required environment variables
 GENIE_SPACE_ID = os.environ.get("GENIE_SPACE_ID")
 DASHBOARD_ID = os.environ.get("DASHBOARD_ID")
 
+# For local development only - no hardcoded default
+LOCAL_DEV_PROFILE = os.environ.get("DATABRICKS_PROFILE")
+
+
+def _get_workspace_client():
+    """Get a WorkspaceClient for the current environment."""
+    from databricks.sdk import WorkspaceClient
+
+    if IS_DATABRICKS_ENV:
+        # In Databricks - SDK auto-detects credentials
+        return WorkspaceClient()
+    elif LOCAL_DEV_PROFILE:
+        # Local dev with explicit profile
+        return WorkspaceClient(profile=LOCAL_DEV_PROFILE)
+    else:
+        # Try default SDK behavior (checks env vars, default profile, etc.)
+        return WorkspaceClient()
+
 
 def get_workspace_id() -> str:
     """Get the workspace ID for embed URLs."""
-    from databricks.sdk import WorkspaceClient
-
-    if IS_DATABRICKS_APP:
-        client = WorkspaceClient()
-    else:
-        profile = os.environ.get("DATABRICKS_PROFILE", "illumia-demo")
-        client = WorkspaceClient(profile=profile)
-
+    client = _get_workspace_client()
     return str(client.get_workspace_id())
+
+
+def get_workspace_host() -> str:
+    """Get workspace host with https:// prefix."""
+    if IS_DATABRICKS_ENV and DATABRICKS_HOST_ENV:
+        host = DATABRICKS_HOST_ENV
+        if not host.startswith("http"):
+            host = f"https://{host}"
+        return host
+
+    # Fall back to SDK config
+    client = _get_workspace_client()
+    return client.config.host
 
 
 def get_dashboard_embed_url() -> Optional[str]:
@@ -40,44 +68,18 @@ def get_dashboard_embed_url() -> Optional[str]:
     return f"{host}/embed/dashboardsv3/{DASHBOARD_ID}?o={workspace_id}"
 
 
-def get_workspace_host() -> str:
-    """Get workspace host with https:// prefix."""
-    if IS_DATABRICKS_APP:
-        host = os.environ.get("DATABRICKS_HOST", "")
-        if host and not host.startswith("http"):
-            host = f"https://{host}"
-        return host
-
-    # Local development - use CLI profile
-    from databricks.sdk import WorkspaceClient
-    profile = os.environ.get("DATABRICKS_PROFILE", "illumia-demo")
-    client = WorkspaceClient(profile=profile)
-    return client.config.host
-
-
 def get_auth_token(forwarded_token: Optional[str] = None) -> str:
     """
     Get authentication token for API calls.
 
     Priority:
     1. User's forwarded token (identity passthrough)
-    2. Service principal token (Databricks App)
-    3. CLI profile token (local development)
+    2. SDK-managed token (auto-detects Databricks App or local config)
     """
     if forwarded_token:
         return forwarded_token
 
-    if IS_DATABRICKS_APP:
-        from databricks.sdk import WorkspaceClient
-        client = WorkspaceClient()
-        auth_headers = client.config.authenticate()
-        if auth_headers and "Authorization" in auth_headers:
-            return auth_headers["Authorization"].replace("Bearer ", "")
-
-    # Local development fallback
-    from databricks.sdk import WorkspaceClient
-    profile = os.environ.get("DATABRICKS_PROFILE", "illumia-demo")
-    client = WorkspaceClient(profile=profile)
+    client = _get_workspace_client()
     auth_headers = client.config.authenticate()
     if auth_headers and "Authorization" in auth_headers:
         return auth_headers["Authorization"].replace("Bearer ", "")

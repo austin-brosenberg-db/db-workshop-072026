@@ -13,6 +13,9 @@ from .config import (
     get_dashboard_embed_url,
     GENIE_SPACE_ID,
     DASHBOARD_ID,
+    IS_DATABRICKS_ENV,
+    DATABRICKS_APP_NAME,
+    DATABRICKS_HOST_ENV,
 )
 from .genie_client import GenieClient
 
@@ -132,6 +135,13 @@ async def get_config():
         "genie_space_id": GENIE_SPACE_ID,
         "dashboard_id": DASHBOARD_ID,
         "dashboard_url": get_dashboard_embed_url(),
+        # Debug info - remove after troubleshooting
+        "_debug": {
+            "is_databricks_env": IS_DATABRICKS_ENV,
+            "databricks_app_name": DATABRICKS_APP_NAME,
+            "databricks_host_env": DATABRICKS_HOST_ENV,
+            "resolved_host": get_workspace_host(),
+        }
     }
 
 
