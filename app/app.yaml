@@ -6,6 +6,6 @@ command:
 
 env:
   - name: GENIE_SPACE_ID
-    value: "01f17f8acc3d128e86800518c1dace5e"
+    value: "<your-genie-space-id>"
   - name: DASHBOARD_ID
-    value: "01f17f8a836612adbe8cb0bc36371b43"
+    value: "<your-dashboard-id>"
