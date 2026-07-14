@@ -27,6 +27,7 @@ class GenieResponse:
     query: Optional[str] = None
     results: Optional[List[Dict[str, Any]]] = None
     error: Optional[str] = None
+    attachment_id: Optional[str] = None
 
 
 class GenieClient:
@@ -102,6 +103,7 @@ class GenieClient:
             # Genie API returns attachments with direct 'text' and 'query' fields
             content = None
             query = None
+            attachment_id = None
             attachments = data.get("attachments", [])
 
             for att in attachments:
@@ -122,13 +124,17 @@ class GenieClient:
                         query = query_value
                     elif isinstance(query_value, dict):
                         query = query_value.get("query", "")
+                    # Capture the attachment ID for fetching results
+                    if "id" in att:
+                        attachment_id = att["id"]
 
             return GenieResponse(
                 conversation_id=conversation_id,
                 message_id=message_id,
                 status=status,
                 content=content,
-                query=query
+                query=query,
+                attachment_id=attachment_id
             )
 
     async def get_query_results(

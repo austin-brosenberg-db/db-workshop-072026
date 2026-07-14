@@ -37,6 +37,7 @@ class ChatResponse(BaseModel):
     query: Optional[str] = None
     results: Optional[list] = None
     error: Optional[str] = None
+    attachment_id: Optional[str] = None
 
 
 def get_user_token(request: Request) -> Optional[str]:
@@ -95,7 +96,8 @@ async def get_status(request: Request, conversation_id: str, message_id: str):
             status=response.status,
             content=response.content,
             query=response.query,
-            error=response.error
+            error=response.error,
+            attachment_id=response.attachment_id
         )
     finally:
         await client.close()

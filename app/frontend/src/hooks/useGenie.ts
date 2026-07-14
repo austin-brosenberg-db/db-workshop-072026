@@ -18,6 +18,7 @@ interface ChatResponse {
   query?: string
   results?: Record<string, unknown>[]
   error?: string
+  attachment_id?: string
 }
 
 export function useGenie() {
@@ -102,6 +103,22 @@ export function useGenie() {
         }
       }
 
+      // Fetch query results if available
+      let queryResults: Record<string, unknown>[] | undefined = finalData.results
+      if (status === 'COMPLETED' && finalData.attachment_id && data.conversation_id) {
+        try {
+          const resultsResponse = await fetch(
+            `/api/chat/${data.conversation_id}/${data.message_id}/results/${finalData.attachment_id}`
+          )
+          if (resultsResponse.ok) {
+            const resultsData = await resultsResponse.json()
+            queryResults = resultsData.results
+          }
+        } catch (resultsError) {
+          console.warn('Failed to fetch query results:', resultsError)
+        }
+      }
+
       // Update with final response
       setMessages(prev =>
         prev.map(m =>
@@ -110,7 +127,7 @@ export function useGenie() {
                 ...m,
                 content: finalData.content || 'No response received',
                 query: finalData.query,
-                results: finalData.results,
+                results: queryResults,
                 status: status === 'COMPLETED' ? 'completed' : 'failed',
               }
             : m
