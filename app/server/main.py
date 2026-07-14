@@ -131,24 +131,39 @@ async def health():
 @app.get("/api/config")
 async def get_config():
     """Return app configuration for frontend."""
+    # Try to get dashboard URL, but don't crash if SDK fails
+    dashboard_url = None
+    resolved_host = None
+    sdk_error = None
+
+    try:
+        dashboard_url = get_dashboard_embed_url()
+        resolved_host = get_workspace_host()
+    except Exception as e:
+        sdk_error = str(e)
+
     return {
         "genie_space_id": GENIE_SPACE_ID,
         "dashboard_id": DASHBOARD_ID,
-        "dashboard_url": get_dashboard_embed_url(),
+        "dashboard_url": dashboard_url,
         # Debug info - remove after troubleshooting
         "_debug": {
             "is_databricks_env": IS_DATABRICKS_ENV,
             "databricks_app_name": DATABRICKS_APP_NAME,
             "databricks_host_env": DATABRICKS_HOST_ENV,
-            "resolved_host": get_workspace_host(),
+            "resolved_host": resolved_host,
+            "sdk_error": sdk_error,
         }
     }
 
 
 # Serve static files (React build) in production
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
-if os.path.exists(static_dir):
-    app.mount("/assets", StaticFiles(directory=os.path.join(static_dir, "assets")), name="assets")
+assets_dir = os.path.join(static_dir, "assets")
+
+# Only mount static files if both directories exist
+if os.path.exists(static_dir) and os.path.exists(assets_dir):
+    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
@@ -157,3 +172,13 @@ if os.path.exists(static_dir):
         if os.path.exists(index_path):
             return FileResponse(index_path)
         raise HTTPException(status_code=404, detail="Not found")
+else:
+    @app.get("/")
+    async def no_frontend():
+        """Fallback when static files are not available."""
+        return {
+            "error": "Frontend not built",
+            "message": "Static files not found. Run 'npm run build' in the frontend directory.",
+            "static_dir_exists": os.path.exists(static_dir),
+            "assets_dir_exists": os.path.exists(assets_dir),
+        }

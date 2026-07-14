@@ -24,13 +24,21 @@ def _get_workspace_client():
 
     if IS_DATABRICKS_ENV:
         # In Databricks - SDK auto-detects credentials
-        return WorkspaceClient()
+        try:
+            return WorkspaceClient()
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to create WorkspaceClient in Databricks environment. "
+                f"DATABRICKS_HOST={DATABRICKS_HOST_ENV}, error: {e}"
+            ) from e
     elif LOCAL_DEV_PROFILE:
         # Local dev with explicit profile
         return WorkspaceClient(profile=LOCAL_DEV_PROFILE)
     else:
-        # Try default SDK behavior (checks env vars, default profile, etc.)
-        return WorkspaceClient()
+        raise RuntimeError(
+            "No Databricks authentication configured. "
+            "Set DATABRICKS_HOST (for Databricks Apps) or DATABRICKS_PROFILE (for local dev)."
+        )
 
 
 def get_workspace_id() -> str:
