@@ -507,6 +507,7 @@ display(spark.sql(query4))
 # Create the dashboard using the Lakeview API
 import json
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.dashboards import Dashboard
 
 w = WorkspaceClient()
 
@@ -607,11 +608,13 @@ dashboard_definition = {
     ]
 }
 
-# Create the dashboard
+# Create the Dashboard object and call the API
 dashboard = w.lakeview.create(
-    display_name=dashboard_name,
-    serialized_dashboard=json.dumps(dashboard_definition),
-    parent_path=f"/Workspace/Users/{USER_EMAIL}"
+    dashboard=Dashboard(
+        display_name=dashboard_name,
+        serialized_dashboard=json.dumps(dashboard_definition),
+        parent_path=f"/Workspace/Users/{USER_EMAIL}"
+    )
 )
 
 DASHBOARD_ID = dashboard.dashboard_id
