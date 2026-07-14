@@ -99,16 +99,29 @@ class GenieClient:
             status = data.get("status", "PENDING")
 
             # Extract content and query from attachments
+            # Genie API returns attachments with direct 'text' and 'query' fields
             content = None
             query = None
             attachments = data.get("attachments", [])
 
             for att in attachments:
-                if att.get("type") == "TEXT":
-                    content = att.get("text", {}).get("content", "")
-                elif att.get("type") == "QUERY":
-                    query_data = att.get("query", {})
-                    query = query_data.get("query", "")
+                # Direct text field contains the natural language response
+                if "text" in att and att["text"]:
+                    text_value = att["text"]
+                    # Handle both string and nested object formats
+                    if isinstance(text_value, str):
+                        content = text_value
+                    elif isinstance(text_value, dict):
+                        content = text_value.get("content", "")
+
+                # Direct query field contains the SQL
+                if "query" in att and att["query"]:
+                    query_value = att["query"]
+                    # Handle both string and nested object formats
+                    if isinstance(query_value, str):
+                        query = query_value
+                    elif isinstance(query_value, dict):
+                        query = query_value.get("query", "")
 
             return GenieResponse(
                 conversation_id=conversation_id,
