@@ -106,6 +106,16 @@ class GenieClient:
             attachment_id = None
             attachments = data.get("attachments", [])
 
+            # Debug: log the raw response and attachment structure
+            import json
+            print(f"DEBUG get_message - status: {status}, attachments count: {len(attachments)}")
+            print(f"DEBUG full response keys: {list(data.keys())}")
+            for i, att in enumerate(attachments):
+                print(f"DEBUG attachment[{i}] FULL: {json.dumps(att, default=str)}")
+            # Also check for attachment IDs at the message level
+            if "attachment_ids" in data:
+                print(f"DEBUG message-level attachment_ids: {data['attachment_ids']}")
+
             for att in attachments:
                 # Direct text field contains the natural language response
                 if "text" in att and att["text"]:
@@ -124,9 +134,23 @@ class GenieClient:
                         query = query_value
                     elif isinstance(query_value, dict):
                         query = query_value.get("query", "")
-                    # Capture the attachment ID for fetching results
-                    if "id" in att:
-                        attachment_id = att["id"]
+
+                # Capture the attachment ID - check multiple possible field names
+                if not attachment_id:
+                    # Try common field names for attachment ID
+                    for id_field in ["id", "attachment_id", "attachmentId"]:
+                        if id_field in att and att[id_field]:
+                            attachment_id = att[id_field]
+                            print(f"DEBUG: Found attachment_id in field '{id_field}': {attachment_id}")
+                            break
+                    # Also check if ID is nested inside query object
+                    if not attachment_id and isinstance(att.get("query"), dict):
+                        query_obj = att["query"]
+                        for id_field in ["id", "attachment_id", "query_id"]:
+                            if id_field in query_obj and query_obj[id_field]:
+                                attachment_id = query_obj[id_field]
+                                print(f"DEBUG: Found attachment_id in query.{id_field}: {attachment_id}")
+                                break
 
             return GenieResponse(
                 conversation_id=conversation_id,

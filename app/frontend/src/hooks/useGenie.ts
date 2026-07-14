@@ -105,18 +105,23 @@ export function useGenie() {
 
       // Fetch query results if available
       let queryResults: Record<string, unknown>[] | undefined = finalData.results
+      console.log('Final response:', { status, attachment_id: finalData.attachment_id, query: finalData.query })
       if (status === 'COMPLETED' && finalData.attachment_id && data.conversation_id) {
         try {
-          const resultsResponse = await fetch(
-            `/api/chat/${data.conversation_id}/${data.message_id}/results/${finalData.attachment_id}`
-          )
+          const resultsUrl = `/api/chat/${data.conversation_id}/${data.message_id}/results/${finalData.attachment_id}`
+          console.log('Fetching results from:', resultsUrl)
+          const resultsResponse = await fetch(resultsUrl)
+          console.log('Results response status:', resultsResponse.status)
           if (resultsResponse.ok) {
             const resultsData = await resultsResponse.json()
+            console.log('Results data:', resultsData)
             queryResults = resultsData.results
           }
         } catch (resultsError) {
           console.warn('Failed to fetch query results:', resultsError)
         }
+      } else {
+        console.log('Skipping results fetch:', { status, hasAttachmentId: !!finalData.attachment_id, hasConversationId: !!data.conversation_id })
       }
 
       // Update with final response
