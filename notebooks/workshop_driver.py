@@ -514,6 +514,7 @@ w = WorkspaceClient()
 dashboard_name = f"Illumia Analytics - {USER_ID}"
 
 # Define the dashboard with datasets and widgets
+# Structure based on Lakeview dashboard JSON schema
 dashboard_definition = {
     "datasets": [
         {
@@ -545,13 +546,37 @@ dashboard_definition = {
                 {
                     "widget": {
                         "name": "revenue_chart",
-                        "queries": [{"name": "revenue_by_location", "query": {"datasetName": "revenue_by_location"}}],
+                        "queries": [
+                            {
+                                "name": "main_query",
+                                "query": {
+                                    "datasetName": "revenue_by_location",
+                                    "fields": [
+                                        {"name": "merchant_name", "expression": "`merchant_name`"},
+                                        {"name": "total_revenue", "expression": "`total_revenue`"}
+                                    ],
+                                    "disaggregated": True
+                                }
+                            }
+                        ],
                         "spec": {
-                            "version": 2,
+                            "version": 3,
                             "widgetType": "bar",
                             "encodings": {
-                                "x": {"fieldName": "merchant_name", "displayName": "Merchant"},
-                                "y": {"fieldName": "total_revenue", "displayName": "Total Revenue"}
+                                "x": {
+                                    "fieldName": "total_revenue",
+                                    "scale": {"type": "quantitative"},
+                                    "displayName": "Total Revenue"
+                                },
+                                "y": {
+                                    "fieldName": "merchant_name",
+                                    "scale": {"type": "categorical"},
+                                    "displayName": "Merchant"
+                                }
+                            },
+                            "frame": {
+                                "showTitle": True,
+                                "title": "Revenue by Location"
                             }
                         }
                     },
@@ -560,14 +585,43 @@ dashboard_definition = {
                 {
                     "widget": {
                         "name": "waste_chart",
-                        "queries": [{"name": "food_waste", "query": {"datasetName": "food_waste"}}],
+                        "queries": [
+                            {
+                                "name": "main_query",
+                                "query": {
+                                    "datasetName": "food_waste",
+                                    "fields": [
+                                        {"name": "location_name", "expression": "`location_name`"},
+                                        {"name": "avg_waste_pct", "expression": "`avg_waste_pct`"},
+                                        {"name": "meal_period", "expression": "`meal_period`"}
+                                    ],
+                                    "disaggregated": True
+                                }
+                            }
+                        ],
                         "spec": {
-                            "version": 2,
+                            "version": 3,
                             "widgetType": "bar",
                             "encodings": {
-                                "x": {"fieldName": "location_name", "displayName": "Location"},
-                                "y": {"fieldName": "avg_waste_pct", "displayName": "Avg Waste %"},
-                                "color": {"fieldName": "meal_period", "displayName": "Meal Period"}
+                                "x": {
+                                    "fieldName": "avg_waste_pct",
+                                    "scale": {"type": "quantitative"},
+                                    "displayName": "Avg Waste %"
+                                },
+                                "y": {
+                                    "fieldName": "location_name",
+                                    "scale": {"type": "categorical"},
+                                    "displayName": "Location"
+                                },
+                                "color": {
+                                    "fieldName": "meal_period",
+                                    "scale": {"type": "categorical"},
+                                    "displayName": "Meal Period"
+                                }
+                            },
+                            "frame": {
+                                "showTitle": True,
+                                "title": "Food Waste by Dining Hall"
                             }
                         }
                     },
@@ -576,13 +630,37 @@ dashboard_definition = {
                 {
                     "widget": {
                         "name": "engagement_chart",
-                        "queries": [{"name": "engagement_distribution", "query": {"datasetName": "engagement_distribution"}}],
+                        "queries": [
+                            {
+                                "name": "main_query",
+                                "query": {
+                                    "datasetName": "engagement_distribution",
+                                    "fields": [
+                                        {"name": "engagement_tier", "expression": "`engagement_tier`"},
+                                        {"name": "cardholder_count", "expression": "`cardholder_count`"}
+                                    ],
+                                    "disaggregated": True
+                                }
+                            }
+                        ],
                         "spec": {
-                            "version": 2,
+                            "version": 3,
                             "widgetType": "pie",
                             "encodings": {
-                                "theta": {"fieldName": "cardholder_count", "displayName": "Count"},
-                                "color": {"fieldName": "engagement_tier", "displayName": "Engagement Tier"}
+                                "angle": {
+                                    "fieldName": "cardholder_count",
+                                    "scale": {"type": "quantitative"},
+                                    "displayName": "Count"
+                                },
+                                "color": {
+                                    "fieldName": "engagement_tier",
+                                    "scale": {"type": "categorical"},
+                                    "displayName": "Engagement Tier"
+                                }
+                            },
+                            "frame": {
+                                "showTitle": True,
+                                "title": "Engagement Distribution"
                             }
                         }
                     },
@@ -591,13 +669,37 @@ dashboard_definition = {
                 {
                     "widget": {
                         "name": "housing_chart",
-                        "queries": [{"name": "spending_by_housing", "query": {"datasetName": "spending_by_housing"}}],
+                        "queries": [
+                            {
+                                "name": "main_query",
+                                "query": {
+                                    "datasetName": "spending_by_housing",
+                                    "fields": [
+                                        {"name": "housing_area", "expression": "`housing_area`"},
+                                        {"name": "avg_spend_per_customer", "expression": "`avg_spend_per_customer`"}
+                                    ],
+                                    "disaggregated": True
+                                }
+                            }
+                        ],
                         "spec": {
-                            "version": 2,
+                            "version": 3,
                             "widgetType": "bar",
                             "encodings": {
-                                "x": {"fieldName": "housing_area", "displayName": "Housing Area"},
-                                "y": {"fieldName": "avg_spend_per_customer", "displayName": "Avg Spend per Customer"}
+                                "x": {
+                                    "fieldName": "avg_spend_per_customer",
+                                    "scale": {"type": "quantitative"},
+                                    "displayName": "Avg Spend per Customer"
+                                },
+                                "y": {
+                                    "fieldName": "housing_area",
+                                    "scale": {"type": "categorical"},
+                                    "displayName": "Housing Area"
+                                }
+                            },
+                            "frame": {
+                                "showTitle": True,
+                                "title": "Spending by Housing Area"
                             }
                         }
                     },
