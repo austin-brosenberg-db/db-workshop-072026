@@ -172,7 +172,8 @@ spark.sql(f"""
     TBLPROPERTIES (delta.enableChangeDataFeed = true)
     AS SELECT
         cardholder_id,
-        cardholder_name,
+        first_name,
+        last_name,
         patron_type_clean,
         status,
         engagement_tier,
@@ -236,7 +237,8 @@ print("All changes captured by Change Data Feed:")
 display(spark.sql(f"""
     SELECT
         cardholder_id,
-        cardholder_name,
+        first_name,
+        last_name,
         engagement_tier,
         status,
         engagement_score,
@@ -277,7 +279,8 @@ display(spark.sql(f"""
     WITH changes AS (
         SELECT
             cardholder_id,
-            cardholder_name,
+            first_name,
+            last_name,
             _change_type,
             engagement_tier,
             engagement_score,
@@ -289,7 +292,8 @@ display(spark.sql(f"""
     )
     SELECT
         pre.cardholder_id,
-        pre.cardholder_name,
+        pre.first_name,
+        pre.last_name,
         pre.engagement_tier as old_tier,
         post.engagement_tier as new_tier,
         pre.engagement_score as old_score,
@@ -335,7 +339,8 @@ print("Data as of version 0 (before our updates):")
 display(spark.sql(f"""
     SELECT
         cardholder_id,
-        cardholder_name,
+        first_name,
+        last_name,
         engagement_tier,
         engagement_score,
         status
@@ -399,7 +404,8 @@ print(f"\nQuerying data as of original load time: {original_timestamp}")
 display(spark.sql(f"""
     SELECT
         cardholder_id,
-        cardholder_name,
+        first_name,
+        last_name,
         total_spend,
         engagement_tier,
         engagement_score,
@@ -721,29 +727,34 @@ print("Created standalone table: cardholder_360_secure")
 
 # COMMAND ----------
 
-# Create a masking function for cardholder names
+# Create a masking function for names (works on first_name or last_name)
 spark.sql(f"""
-    CREATE OR REPLACE FUNCTION {USER_CATALOG}.{USER_SCHEMA}.mask_cardholder_name(name STRING)
+    CREATE OR REPLACE FUNCTION {USER_CATALOG}.{USER_SCHEMA}.mask_name(name STRING)
     RETURNS STRING
     RETURN CASE
         -- Admins see full name
         WHEN is_account_group_member('card_admins') THEN name
-        -- Others see masked name (first initial + *** + last initial)
-        ELSE CONCAT(LEFT(name, 1), '****', RIGHT(name, 1))
+        -- Others see masked name (first initial + ***)
+        ELSE CONCAT(LEFT(name, 1), '***')
     END
 """)
 
-print("Created masking function: mask_cardholder_name")
+print("Created masking function: mask_name")
 
 # COMMAND ----------
 
-# Apply the mask to the cardholder_name column on the standalone table
+# Apply the mask to both first_name and last_name columns on the standalone table
 spark.sql(f"""
     ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
-    ALTER COLUMN cardholder_name SET MASK {USER_CATALOG}.{USER_SCHEMA}.mask_cardholder_name
+    ALTER COLUMN first_name SET MASK {USER_CATALOG}.{USER_SCHEMA}.mask_name
 """)
 
-print("Applied column mask to cardholder_name")
+spark.sql(f"""
+    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
+    ALTER COLUMN last_name SET MASK {USER_CATALOG}.{USER_SCHEMA}.mask_name
+""")
+
+print("Applied column mask to first_name and last_name")
 
 # COMMAND ----------
 
@@ -752,7 +763,8 @@ print("Cardholder data with masking applied:")
 display(spark.sql(f"""
     SELECT
         cardholder_id,
-        cardholder_name,  -- This will be masked for non-admins
+        first_name,   -- This will be masked for non-admins
+        last_name,    -- This will be masked for non-admins
         patron_type_clean,
         engagement_tier,
         total_spend
@@ -775,8 +787,8 @@ display(spark.sql(f"""
 # MAGIC -- Streaming table with row filter and column mask
 # MAGIC CREATE OR REFRESH STREAMING TABLE silver_cardholders (
 # MAGIC     cardholder_id STRING,
-# MAGIC     cardholder_name STRING
-# MAGIC         MASK catalog.schema.mask_cardholder_name,
+# MAGIC     first_name STRING MASK catalog.schema.mask_name,
+# MAGIC     last_name STRING MASK catalog.schema.mask_name,
 # MAGIC     email STRING,
 # MAGIC     patron_type STRING,
 # MAGIC     housing_area STRING
@@ -804,7 +816,8 @@ display(spark.sql(f"""
 # MAGIC     row_filter="catalog.schema.filter_by_department ON (department)",
 # MAGIC     schema='''
 # MAGIC         cardholder_id STRING,
-# MAGIC         cardholder_name STRING MASK catalog.schema.mask_cardholder_name,
+# MAGIC         first_name STRING MASK catalog.schema.mask_name,
+# MAGIC         last_name STRING MASK catalog.schema.mask_name,
 # MAGIC         email STRING
 # MAGIC     '''
 # MAGIC )
@@ -892,7 +905,8 @@ spark.sql(f"""
     CREATE OR REPLACE TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_sensitive_data AS
     SELECT
         cardholder_id,
-        cardholder_name,
+        first_name,
+        last_name,
         -- Simulate an encrypted student ID using base64 encoding
         -- In production, use AES_ENCRYPT with a secret key
         base64(CAST(cardholder_id AS BINARY)) as encrypted_student_id,
@@ -930,7 +944,8 @@ spark.sql(f"""
     CREATE OR REPLACE VIEW {USER_CATALOG}.{USER_SCHEMA}.v_cardholder_secure AS
     SELECT
         cardholder_id,
-        cardholder_name,
+        first_name,
+        last_name,
         {USER_CATALOG}.{USER_SCHEMA}.decrypt_student_id(encrypted_student_id) as student_id,
         email,
         patron_type_clean
@@ -991,7 +1006,12 @@ display(spark.sql(f"""
 # (Note: This also works on materialized views - tags are metadata, not access control)
 spark.sql(f"""
     ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
-    ALTER COLUMN cardholder_name SET TAGS ('pii' = 'true', 'sensitivity' = 'high')
+    ALTER COLUMN first_name SET TAGS ('pii' = 'true', 'sensitivity' = 'high')
+""")
+
+spark.sql(f"""
+    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
+    ALTER COLUMN last_name SET TAGS ('pii' = 'true', 'sensitivity' = 'high')
 """)
 
 spark.sql(f"""
@@ -1399,13 +1419,17 @@ print(github_workflow)
 # except Exception as e:
 #     print(f"Row filter cleanup: {e}")
 #
-# # Remove column mask from standalone demo table
+# # Remove column masks from standalone demo table
 # try:
 #     spark.sql(f"""
 #         ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
-#         ALTER COLUMN cardholder_name DROP MASK
+#         ALTER COLUMN first_name DROP MASK
 #     """)
-#     print("Removed column mask from cardholder_360_secure")
+#     spark.sql(f"""
+#         ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
+#         ALTER COLUMN last_name DROP MASK
+#     """)
+#     print("Removed column masks from cardholder_360_secure")
 # except Exception as e:
 #     print(f"Column mask cleanup: {e}")
 #
@@ -1429,7 +1453,7 @@ print(github_workflow)
 # # Drop functions
 # functions_to_drop = [
 #     "dining_location_filter",
-#     "mask_cardholder_name",
+#     "mask_name",
 #     "decrypt_student_id",
 # ]
 #
