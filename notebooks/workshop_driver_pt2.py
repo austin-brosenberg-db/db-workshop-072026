@@ -149,49 +149,118 @@ print("Note: Performance difference is more pronounced with larger datasets")
 # MAGIC - Audit trails
 # MAGIC - Real-time synchronization
 # MAGIC - CDC (Change Data Capture) patterns
+# MAGIC
+# MAGIC ### Important: CDF Compatibility
+# MAGIC
+# MAGIC | Table Type | CDF Support |
+# MAGIC |------------|-------------|
+# MAGIC | Regular Delta tables | ✅ Full support via `ALTER TABLE ... SET TBLPROPERTIES` |
+# MAGIC | SDP Streaming tables | ❌ Cannot enable via ALTER TABLE |
+# MAGIC | SDP Materialized views | ❌ Not supported |
+# MAGIC
+# MAGIC Since our pipeline tables are streaming tables and materialized views, we'll create a
+# MAGIC **standalone Delta table** to demonstrate CDF. This is the common pattern for operational
+# MAGIC tables that need change tracking.
 
 # COMMAND ----------
 
-# Enable CDF on a gold table
+# Create a standalone Delta table (not part of DLT) for CDF demonstration
+# This represents an operational table that receives updates from external systems
+
 spark.sql(f"""
-    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
-    SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+    CREATE OR REPLACE TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking
+    TBLPROPERTIES (delta.enableChangeDataFeed = true)
+    AS SELECT
+        cardholder_id,
+        cardholder_name,
+        patron_type_clean,
+        status,
+        engagement_tier,
+        engagement_score,
+        total_spend,
+        current_timestamp() as last_updated
+    FROM {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+    LIMIT 100
 """)
 
-print("Enabled Change Data Feed on gold_cardholder_360")
+print("Created CDF-enabled table: cardholder_status_tracking")
+print("This table simulates an operational table that receives updates")
+
+# COMMAND ----------
+
+# Verify CDF is enabled
+display(spark.sql(f"""
+    SHOW TBLPROPERTIES {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking
+"""))
+
+# COMMAND ----------
+
+# Get the starting version for our CDF queries
+starting_version = spark.sql(f"""
+    SELECT MAX(version) as v FROM (DESCRIBE HISTORY {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking)
+""").first()[0]
+
+print(f"Starting version: {starting_version}")
 
 # COMMAND ----------
 
 # Make some changes to demonstrate CDF
-# First, let's update some engagement tiers
+# Scenario: Several cardholders get engagement tier upgrades
 
 spark.sql(f"""
-    UPDATE {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+    UPDATE {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking
     SET engagement_tier = 'Platinum',
-        engagement_score = engagement_score + 10
-    WHERE engagement_tier = 'Gold' AND engagement_score > 70
-    LIMIT 5
+        engagement_score = engagement_score + 50,
+        last_updated = current_timestamp()
+    WHERE engagement_tier = 'high' AND engagement_score > 200
 """)
 
-print("Updated 5 cardholders from Gold to Platinum tier")
+print("Upgraded high-engagement cardholders to Platinum tier")
+
+# COMMAND ----------
+
+# Make another change - some cardholders become inactive
+spark.sql(f"""
+    UPDATE {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking
+    SET status = 'inactive',
+        last_updated = current_timestamp()
+    WHERE total_spend < 50 AND engagement_tier = 'low'
+""")
+
+print("Marked low-activity cardholders as inactive")
 
 # COMMAND ----------
 
 # Query the change data feed to see what changed
-print("Recent changes captured by Change Data Feed:")
+print("All changes captured by Change Data Feed:")
 display(spark.sql(f"""
     SELECT
         cardholder_id,
         cardholder_name,
         engagement_tier,
+        status,
         engagement_score,
         _change_type,
         _commit_version,
         _commit_timestamp
-    FROM table_changes('{USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360', 1)
-    ORDER BY _commit_timestamp DESC
-    LIMIT 20
+    FROM table_changes('{USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking', {starting_version + 1})
+    ORDER BY _commit_version, cardholder_id
+    LIMIT 30
 """))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Understanding CDF Change Types
+# MAGIC
+# MAGIC | Change Type | Description |
+# MAGIC |-------------|-------------|
+# MAGIC | `insert` | New row added |
+# MAGIC | `update_preimage` | Row value BEFORE the update |
+# MAGIC | `update_postimage` | Row value AFTER the update |
+# MAGIC | `delete` | Row was deleted |
+# MAGIC
+# MAGIC The preimage/postimage pairs let you see exactly what changed.
 
 # COMMAND ----------
 
@@ -202,19 +271,39 @@ display(spark.sql(f"""
 
 # COMMAND ----------
 
-# Create an audit view showing tier progression
+# Create an audit view showing tier progression (before vs after)
 print("Engagement tier change audit trail:")
 display(spark.sql(f"""
+    WITH changes AS (
+        SELECT
+            cardholder_id,
+            cardholder_name,
+            _change_type,
+            engagement_tier,
+            engagement_score,
+            status,
+            _commit_timestamp,
+            _commit_version
+        FROM table_changes('{USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking', {starting_version + 1})
+        WHERE _change_type IN ('update_preimage', 'update_postimage')
+    )
     SELECT
-        cardholder_id,
-        _change_type as change_type,
-        engagement_tier,
-        engagement_score,
-        _commit_timestamp as changed_at,
-        _commit_version as version
-    FROM table_changes('{USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360', 1)
-    WHERE _change_type IN ('update_preimage', 'update_postimage')
-    ORDER BY cardholder_id, _commit_timestamp
+        pre.cardholder_id,
+        pre.cardholder_name,
+        pre.engagement_tier as old_tier,
+        post.engagement_tier as new_tier,
+        pre.engagement_score as old_score,
+        post.engagement_score as new_score,
+        pre.status as old_status,
+        post.status as new_status,
+        post._commit_timestamp as changed_at
+    FROM changes pre
+    JOIN changes post
+        ON pre.cardholder_id = post.cardholder_id
+        AND pre._commit_version = post._commit_version
+        AND pre._change_type = 'update_preimage'
+        AND post._change_type = 'update_postimage'
+    ORDER BY post._commit_timestamp, pre.cardholder_id
 """))
 
 # COMMAND ----------
@@ -227,50 +316,53 @@ display(spark.sql(f"""
 # MAGIC - Audit data as of specific timestamps
 # MAGIC - Recover from accidental changes
 # MAGIC - Reproduce past analyses
+# MAGIC
+# MAGIC We'll use our CDF-enabled table to demonstrate time travel since it has multiple versions from our updates.
 
 # COMMAND ----------
 
-# View table history
+# View table history - shows all versions from our updates
 print("Table version history:")
 display(spark.sql(f"""
-    DESCRIBE HISTORY {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+    DESCRIBE HISTORY {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking
     LIMIT 10
 """))
 
 # COMMAND ----------
 
-# Query data as it existed before our updates (version 0 or 1)
-print("Data as of the first version (before our updates):")
+# Query data as it existed at version 0 (initial load, before any updates)
+print("Data as of version 0 (before our updates):")
 display(spark.sql(f"""
     SELECT
         cardholder_id,
         cardholder_name,
         engagement_tier,
-        engagement_score
-    FROM {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360 VERSION AS OF 1
-    WHERE engagement_tier = 'Gold'
+        engagement_score,
+        status
+    FROM {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking VERSION AS OF 0
+    WHERE engagement_tier = 'high'
     LIMIT 10
 """))
 
 # COMMAND ----------
 
 # Compare current vs historical state
-print("Comparing current vs historical engagement tier distribution:")
+print("Comparing current vs original engagement tier distribution:")
 display(spark.sql(f"""
     SELECT
         'Current' as snapshot,
         engagement_tier,
         COUNT(*) as count
-    FROM {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+    FROM {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking
     GROUP BY engagement_tier
 
     UNION ALL
 
     SELECT
-        'Version 1' as snapshot,
+        'Version 0 (Original)' as snapshot,
         engagement_tier,
         COUNT(*) as count
-    FROM {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360 VERSION AS OF 1
+    FROM {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking VERSION AS OF 0
     GROUP BY engagement_tier
 
     ORDER BY snapshot, engagement_tier
@@ -281,7 +373,7 @@ display(spark.sql(f"""
 # MAGIC %md
 # MAGIC ### Time Travel Use Case: Point-in-Time Reporting
 # MAGIC
-# MAGIC "What was this student's spend last week before the correction?"
+# MAGIC "What was this student's status before the correction?"
 
 # COMMAND ----------
 
@@ -289,20 +381,31 @@ display(spark.sql(f"""
 from datetime import datetime, timedelta
 
 # Get a timestamp from the history
-history = spark.sql(f"""
-    SELECT timestamp FROM (DESCRIBE HISTORY {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360)
-    ORDER BY version DESC LIMIT 1
+history_df = spark.sql(f"""
+    SELECT version, timestamp, operation
+    FROM (DESCRIBE HISTORY {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking)
+    ORDER BY version
+""")
+
+display(history_df)
+
+# Get the timestamp of version 0
+original_timestamp = spark.sql(f"""
+    SELECT timestamp FROM (DESCRIBE HISTORY {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking)
+    WHERE version = 0
 """).first()[0]
 
-print(f"Querying data as of: {history}")
+print(f"\nQuerying data as of original load time: {original_timestamp}")
 display(spark.sql(f"""
     SELECT
         cardholder_id,
+        cardholder_name,
         total_spend,
-        total_transactions,
-        engagement_score
-    FROM {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
-    TIMESTAMP AS OF '{history}'
+        engagement_tier,
+        engagement_score,
+        status
+    FROM {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking
+    TIMESTAMP AS OF '{original_timestamp}'
     LIMIT 10
 """))
 
@@ -1191,25 +1294,53 @@ print(github_workflow)
 # UNCOMMENT TO CLEAN UP PART 2 RESOURCES
 #
 # # Remove row filter
-# spark.sql(f"""
-#     ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations
-#     DROP ROW FILTER
-# """)
+# try:
+#     spark.sql(f"""
+#         ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations
+#         DROP ROW FILTER
+#     """)
+#     print("Removed row filter from gold_dining_operations")
+# except Exception as e:
+#     print(f"Row filter cleanup: {e}")
 #
 # # Remove column mask
-# spark.sql(f"""
-#     ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
-#     ALTER COLUMN cardholder_name DROP MASK
-# """)
+# try:
+#     spark.sql(f"""
+#         ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+#         ALTER COLUMN cardholder_name DROP MASK
+#     """)
+#     print("Removed column mask from gold_cardholder_360")
+# except Exception as e:
+#     print(f"Column mask cleanup: {e}")
 #
 # # Drop demonstration tables/views
-# spark.sql(f"DROP TABLE IF EXISTS {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360_clustered")
-# spark.sql(f"DROP TABLE IF EXISTS {USER_CATALOG}.{USER_SCHEMA}.cardholder_sensitive_data")
-# spark.sql(f"DROP VIEW IF EXISTS {USER_CATALOG}.{USER_SCHEMA}.v_cardholder_secure")
+# demo_objects = [
+#     ("TABLE", "gold_cardholder_360_clustered"),
+#     ("TABLE", "cardholder_status_tracking"),  # CDF demo table
+#     ("TABLE", "cardholder_sensitive_data"),
+#     ("VIEW", "v_cardholder_secure"),
+# ]
+#
+# for obj_type, obj_name in demo_objects:
+#     try:
+#         spark.sql(f"DROP {obj_type} IF EXISTS {USER_CATALOG}.{USER_SCHEMA}.{obj_name}")
+#         print(f"Dropped {obj_type.lower()}: {obj_name}")
+#     except Exception as e:
+#         print(f"{obj_name} cleanup: {e}")
 #
 # # Drop functions
-# spark.sql(f"DROP FUNCTION IF EXISTS {USER_CATALOG}.{USER_SCHEMA}.dining_location_filter")
-# spark.sql(f"DROP FUNCTION IF EXISTS {USER_CATALOG}.{USER_SCHEMA}.mask_cardholder_name")
-# spark.sql(f"DROP FUNCTION IF EXISTS {USER_CATALOG}.{USER_SCHEMA}.decrypt_student_id")
+# functions_to_drop = [
+#     "dining_location_filter",
+#     "mask_cardholder_name",
+#     "decrypt_student_id",
+# ]
 #
+# for func_name in functions_to_drop:
+#     try:
+#         spark.sql(f"DROP FUNCTION IF EXISTS {USER_CATALOG}.{USER_SCHEMA}.{func_name}")
+#         print(f"Dropped function: {func_name}")
+#     except Exception as e:
+#         print(f"{func_name} cleanup: {e}")
+#
+# print("")
 # print("Cleanup complete!")
