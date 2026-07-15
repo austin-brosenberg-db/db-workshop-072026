@@ -612,6 +612,19 @@ display(spark.sql(f"""
 # MAGIC
 # MAGIC Unity Catalog provides fine-grained access controls to protect sensitive data while
 # MAGIC enabling self-service analytics.
+# MAGIC
+# MAGIC ### Important: RLF/CLM Compatibility
+# MAGIC
+# MAGIC | Table Type | Apply via ALTER TABLE | Apply via CREATE/REFRESH |
+# MAGIC |------------|----------------------|--------------------------|
+# MAGIC | Regular Delta tables | ✅ Yes | ✅ Yes |
+# MAGIC | SDP Streaming tables | ❌ No | ✅ Yes (in pipeline definition) |
+# MAGIC | SDP Materialized views | ❌ No | ✅ Yes (in pipeline definition) |
+# MAGIC
+# MAGIC Since our gold tables are **materialized views** created by SDP, we cannot use `ALTER TABLE`
+# MAGIC to add row filters or column masks. Instead, we'll:
+# MAGIC 1. Create standalone Delta tables to demonstrate RLF/CLM with `ALTER TABLE`
+# MAGIC 2. Show the syntax for defining RLF/CLM in SDP pipelines
 
 # COMMAND ----------
 
@@ -624,11 +637,23 @@ display(spark.sql(f"""
 
 # COMMAND ----------
 
+# Create a standalone Delta table for RLF demonstration
+# (Cannot apply ALTER TABLE row filters to SDP materialized views)
+spark.sql(f"""
+    CREATE OR REPLACE TABLE {USER_CATALOG}.{USER_SCHEMA}.dining_operations_secure
+    AS SELECT * FROM {USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations
+""")
+
+print("Created standalone table: dining_operations_secure")
+print("(RLF cannot be applied via ALTER TABLE to SDP materialized views)")
+
+# COMMAND ----------
+
 # First, let's see the current data
 print("All dining locations in the data:")
 display(spark.sql(f"""
     SELECT DISTINCT location_name
-    FROM {USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations
+    FROM {USER_CATALOG}.{USER_SCHEMA}.dining_operations_secure
     ORDER BY location_name
 """))
 
@@ -655,13 +680,13 @@ print("Created row filter function: dining_location_filter")
 
 # COMMAND ----------
 
-# Apply the row filter to the table
+# Apply the row filter to the standalone table
 spark.sql(f"""
-    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations
+    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.dining_operations_secure
     SET ROW FILTER {USER_CATALOG}.{USER_SCHEMA}.dining_location_filter ON (location_name)
 """)
 
-print("Applied row filter to gold_dining_operations")
+print("Applied row filter to dining_operations_secure")
 print("Users will now only see rows matching their location permissions")
 
 # COMMAND ----------
@@ -670,7 +695,7 @@ print("Users will now only see rows matching their location permissions")
 print("Rows visible to current user:")
 display(spark.sql(f"""
     SELECT location_name, COUNT(*) as visible_rows
-    FROM {USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations
+    FROM {USER_CATALOG}.{USER_SCHEMA}.dining_operations_secure
     GROUP BY location_name
 """))
 
@@ -682,6 +707,17 @@ display(spark.sql(f"""
 # MAGIC Column-Level Masking hides or transforms sensitive column values based on user permissions.
 # MAGIC
 # MAGIC **Use Case**: Mask cardholder names for analysts while showing full names to administrators.
+
+# COMMAND ----------
+
+# Create a standalone Delta table for CLM demonstration
+# (Cannot apply ALTER TABLE column masks to SDP materialized views)
+spark.sql(f"""
+    CREATE OR REPLACE TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
+    AS SELECT * FROM {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+""")
+
+print("Created standalone table: cardholder_360_secure")
 
 # COMMAND ----------
 
@@ -701,9 +737,9 @@ print("Created masking function: mask_cardholder_name")
 
 # COMMAND ----------
 
-# Apply the mask to the cardholder_name column
+# Apply the mask to the cardholder_name column on the standalone table
 spark.sql(f"""
-    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
     ALTER COLUMN cardholder_name SET MASK {USER_CATALOG}.{USER_SCHEMA}.mask_cardholder_name
 """)
 
@@ -720,9 +756,65 @@ display(spark.sql(f"""
         patron_type_clean,
         engagement_tier,
         total_spend
-    FROM {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+    FROM {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
     LIMIT 10
 """))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 3.3 RLF/CLM in SDP Pipelines
+# MAGIC
+# MAGIC For streaming tables and materialized views created by Spark Declarative Pipelines,
+# MAGIC row filters and column masks must be defined in the pipeline definition itself using
+# MAGIC the `ROW FILTER` and `MASK` clauses.
+# MAGIC
+# MAGIC ### SQL Syntax for SDP
+# MAGIC
+# MAGIC ```sql
+# MAGIC -- Streaming table with row filter and column mask
+# MAGIC CREATE OR REFRESH STREAMING TABLE silver_cardholders (
+# MAGIC     cardholder_id STRING,
+# MAGIC     cardholder_name STRING
+# MAGIC         MASK catalog.schema.mask_cardholder_name,
+# MAGIC     email STRING,
+# MAGIC     patron_type STRING,
+# MAGIC     housing_area STRING
+# MAGIC )
+# MAGIC ROW FILTER catalog.schema.filter_by_department ON (department)
+# MAGIC AS SELECT * FROM STREAM(bronze_cardholders);
+# MAGIC
+# MAGIC -- Materialized view with security
+# MAGIC CREATE OR REFRESH MATERIALIZED VIEW gold_dining_operations (
+# MAGIC     location_name STRING,
+# MAGIC     total_revenue DECIMAL(10,2),
+# MAGIC     waste_percentage DECIMAL(5,2)
+# MAGIC )
+# MAGIC ROW FILTER catalog.schema.dining_location_filter ON (location_name)
+# MAGIC AS SELECT ... FROM silver_food_service;
+# MAGIC ```
+# MAGIC
+# MAGIC ### Python API for SDP
+# MAGIC
+# MAGIC ```python
+# MAGIC import dlt
+# MAGIC
+# MAGIC @dlt.table(
+# MAGIC     name="silver_cardholders",
+# MAGIC     row_filter="catalog.schema.filter_by_department ON (department)",
+# MAGIC     schema='''
+# MAGIC         cardholder_id STRING,
+# MAGIC         cardholder_name STRING MASK catalog.schema.mask_cardholder_name,
+# MAGIC         email STRING
+# MAGIC     '''
+# MAGIC )
+# MAGIC def silver_cardholders():
+# MAGIC     return dlt.read_stream("bronze_cardholders")
+# MAGIC ```
+# MAGIC
+# MAGIC **Key Difference:** When a pipeline refreshes, row filter and column mask functions run with
+# MAGIC the **pipeline owner's** context. When users query the table, functions run with the
+# MAGIC **invoker's** context - enabling proper access control.
 
 # COMMAND ----------
 
@@ -889,22 +981,26 @@ display(spark.sql(f"""
 # MAGIC ## 3.4 Data Classification Tags
 # MAGIC
 # MAGIC Unity Catalog supports tagging columns with sensitivity classifications for compliance reporting.
+# MAGIC
+# MAGIC **Note:** Unlike RLF/CLM, tags ARE supported via `ALTER TABLE` on materialized views and streaming tables.
+# MAGIC Tags are metadata and don't affect query execution.
 
 # COMMAND ----------
 
-# Add classification tags to columns
+# Add classification tags to columns on our secure table
+# (Note: This also works on materialized views - tags are metadata, not access control)
 spark.sql(f"""
-    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
     ALTER COLUMN cardholder_name SET TAGS ('pii' = 'true', 'sensitivity' = 'high')
 """)
 
 spark.sql(f"""
-    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
     ALTER COLUMN email SET TAGS ('pii' = 'true', 'sensitivity' = 'high')
 """)
 
 spark.sql(f"""
-    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+    ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
     ALTER COLUMN total_spend SET TAGS ('pii' = 'false', 'sensitivity' = 'low')
 """)
 
@@ -913,7 +1009,7 @@ print("Added data classification tags to columns")
 # COMMAND ----------
 
 # Query tags for compliance reporting
-print("PII columns in gold_cardholder_360:")
+print("PII columns in cardholder_360_secure:")
 display(spark.sql(f"""
     SELECT
         column_name,
@@ -921,7 +1017,7 @@ display(spark.sql(f"""
         tag_value
     FROM {USER_CATALOG}.information_schema.column_tags
     WHERE schema_name = '{USER_SCHEMA}'
-      AND table_name = 'gold_cardholder_360'
+      AND table_name = 'cardholder_360_secure'
     ORDER BY column_name, tag_name
 """))
 
@@ -1293,23 +1389,23 @@ print(github_workflow)
 
 # UNCOMMENT TO CLEAN UP PART 2 RESOURCES
 #
-# # Remove row filter
+# # Remove row filter from standalone demo table
 # try:
 #     spark.sql(f"""
-#         ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_dining_operations
+#         ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.dining_operations_secure
 #         DROP ROW FILTER
 #     """)
-#     print("Removed row filter from gold_dining_operations")
+#     print("Removed row filter from dining_operations_secure")
 # except Exception as e:
 #     print(f"Row filter cleanup: {e}")
 #
-# # Remove column mask
+# # Remove column mask from standalone demo table
 # try:
 #     spark.sql(f"""
-#         ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.gold_cardholder_360
+#         ALTER TABLE {USER_CATALOG}.{USER_SCHEMA}.cardholder_360_secure
 #         ALTER COLUMN cardholder_name DROP MASK
 #     """)
-#     print("Removed column mask from gold_cardholder_360")
+#     print("Removed column mask from cardholder_360_secure")
 # except Exception as e:
 #     print(f"Column mask cleanup: {e}")
 #
@@ -1317,7 +1413,9 @@ print(github_workflow)
 # demo_objects = [
 #     ("TABLE", "gold_cardholder_360_clustered"),
 #     ("TABLE", "cardholder_status_tracking"),  # CDF demo table
-#     ("TABLE", "cardholder_sensitive_data"),
+#     ("TABLE", "dining_operations_secure"),    # RLF demo table
+#     ("TABLE", "cardholder_360_secure"),       # CLM demo table
+#     ("TABLE", "cardholder_sensitive_data"),   # Encryption demo table
 #     ("VIEW", "v_cardholder_secure"),
 # ]
 #
