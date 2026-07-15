@@ -64,7 +64,7 @@ print(f"Your resources will be created in: {USER_CATALOG}.{USER_SCHEMA}")
 
 # COMMAND ----------
 
-WORKSHOP_PATH = "" # fill in with github folder path
+WORKSHOP_PATH = "/Workspace/Users/ext_austin.rosenberg@campuscloud.io/db-workshop-072026" # fill in with github folder path
 
 # COMMAND ----------
 
@@ -125,7 +125,7 @@ job = w.jobs.create(
                     "schema": USER_SCHEMA
                 }
             ),
-            existing_cluster_id= # fill in with shared cluster ID
+            existing_cluster_id="0713-164813-zhr5l97m" # fill in with shared cluster ID
         )
     ]
 )
@@ -786,7 +786,7 @@ print("  - Show me cardholders with high engagement scores")
 
 # DASHBOARD_ID was set in Step 7 when we created the dashboard
 # IMPORTANT: Replace GENIE_SPACE_ID with your actual ID from Step 8
-GENIE_SPACE_ID = "YOUR_GENIE_SPACE_ID_HERE"  # e.g., "01f17eb9d71413c99a1aa2e5716ddf23"
+GENIE_SPACE_ID = "01f1805f4955155fa4947e73bccf6116"  # e.g., "01f17eb9d71413c99a1aa2e5716ddf23"
 
 print("Configuration for app deployment:")
 print("="*60)
