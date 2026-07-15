@@ -34,8 +34,8 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "illumia_demo_catalog")
-dbutils.widgets.text("schema", "workshop_data")
+dbutils.widgets.text("catalog", "dbdemo")
+dbutils.widgets.text("schema", "austinr")
 
 USER_CATALOG = dbutils.widgets.get("catalog")
 USER_SCHEMA = dbutils.widgets.get("schema")
@@ -198,7 +198,7 @@ display(spark.sql(f"""
 
 # Get the starting version for our CDF queries
 starting_version = spark.sql(f"""
-    SELECT MAX(version) as v FROM (DESCRIBE HISTORY {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking)
+    SELECT min(version) as v FROM (DESCRIBE HISTORY {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking)
 """).first()[0]
 
 print(f"Starting version: {starting_version}")
@@ -267,52 +267,6 @@ display(spark.sql(f"""
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### CDF Use Case: Audit Trail
-# MAGIC
-# MAGIC Track all tier changes for compliance reporting.
-
-# COMMAND ----------
-
-# Create an audit view showing tier progression (before vs after)
-print("Engagement tier change audit trail:")
-display(spark.sql(f"""
-    WITH changes AS (
-        SELECT
-            cardholder_id,
-            first_name,
-            last_name,
-            _change_type,
-            engagement_tier,
-            engagement_score,
-            status,
-            _commit_timestamp,
-            _commit_version
-        FROM table_changes('{USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking', {starting_version + 1})
-        WHERE _change_type IN ('update_preimage', 'update_postimage')
-    )
-    SELECT
-        pre.cardholder_id,
-        pre.first_name,
-        pre.last_name,
-        pre.engagement_tier as old_tier,
-        post.engagement_tier as new_tier,
-        pre.engagement_score as old_score,
-        post.engagement_score as new_score,
-        pre.status as old_status,
-        post.status as new_status,
-        post._commit_timestamp as changed_at
-    FROM changes pre
-    JOIN changes post
-        ON pre.cardholder_id = post.cardholder_id
-        AND pre._commit_version = post._commit_version
-        AND pre._change_type = 'update_preimage'
-        AND post._change_type = 'update_postimage'
-    ORDER BY post._commit_timestamp, pre.cardholder_id
-"""))
-
-# COMMAND ----------
-
-# MAGIC %md
 # MAGIC ## 1.3 Time Travel
 # MAGIC
 # MAGIC Delta Lake automatically versions data, enabling:
@@ -345,7 +299,7 @@ display(spark.sql(f"""
         engagement_score,
         status
     FROM {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking VERSION AS OF 0
-    WHERE engagement_tier = 'high'
+    WHERE engagement_tier = 'medium'
     LIMIT 10
 """))
 
@@ -430,7 +384,7 @@ display(spark.sql(f"""
 # Run OPTIMIZE to compact files
 print("Running OPTIMIZE on gold_location_analytics...")
 spark.sql(f"""
-    OPTIMIZE {USER_CATALOG}.{USER_SCHEMA}.gold_location_analytics
+    OPTIMIZE {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking
 """)
 print("OPTIMIZE complete!")
 
@@ -438,7 +392,7 @@ print("OPTIMIZE complete!")
 
 # Check file statistics after optimization
 display(spark.sql(f"""
-    DESCRIBE DETAIL {USER_CATALOG}.{USER_SCHEMA}.gold_location_analytics
+    DESCRIBE DETAIL {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking
 """))
 
 # COMMAND ----------
@@ -457,7 +411,7 @@ display(spark.sql(f"""
 # Check what files would be vacuumed (dry run)
 print("Files eligible for cleanup (DRY RUN - nothing deleted):")
 display(spark.sql(f"""
-    VACUUM {USER_CATALOG}.{USER_SCHEMA}.gold_location_analytics DRY RUN
+    VACUUM {USER_CATALOG}.{USER_SCHEMA}.cardholder_status_tracking DRY RUN
 """))
 
 # COMMAND ----------
@@ -1466,3 +1420,4 @@ print(github_workflow)
 #
 # print("")
 # print("Cleanup complete!")
+
